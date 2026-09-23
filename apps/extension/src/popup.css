@@ -1,0 +1,20 @@
+:root { font: 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; color: #18332e; background: #f7f5ef; }
+* { box-sizing: border-box; }
+body { width: 390px; margin: 0; }
+main { padding: 18px; }
+header { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid #d8ddd9; }
+header > span { display: grid; place-items: center; width: 34px; height: 34px; border: 2px solid #287463; border-radius: 8px; color: #287463; font-size: 20px; }
+header strong, header small { display: block; }
+header strong { font-size: 17px; letter-spacing: -.03em; }
+header small { color: #6b7975; }
+#status { min-height: 39px; color: #526762; }
+#rows { display: grid; gap: 7px; max-height: 280px; overflow: auto; }
+#rows label { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 9px; padding: 10px; border: 1px solid #d8ddd9; background: #fff; }
+#rows strong, #rows small { display: block; overflow-wrap: anywhere; }
+#rows small { margin-top: 3px; color: #657570; }
+.actions { display: flex; gap: 8px; margin-top: 14px; }
+button { flex: 1; padding: 10px 12px; border: 1px solid #287463; border-radius: 3px; background: #287463; color: #fff; font: inherit; font-weight: 750; }
+button:first-child { background: transparent; color: #245d51; }
+button:disabled { opacity: .55; }
+button:focus-visible, input:focus-visible { outline: 3px solid #d6953b; outline-offset: 2px; }
+footer { margin-top: 14px; padding-top: 11px; border-top: 1px solid #d8ddd9; color: #73807d; font-size: 11px; text-align: center; }

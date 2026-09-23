@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Foliora — Preview-first fill",
+  "version": "0.1.0",
+  "description": "Fill only reviewed Foliora claims after an exact preview. Never submits forms.",
+  "permissions": ["activeTab", "scripting", "nativeMessaging"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_popup": "popup.html", "default_title": "Foliora"}
+}

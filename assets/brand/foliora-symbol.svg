@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Foliora symbol</title>
+  <desc id="description">Two offset document leaves connected by an open line.</desc>
+  <rect width="512" height="512" rx="112" fill="#F7F5EF"/>
+  <path d="M116 127c0-20 16-36 36-36h170c20 0 36 16 36 36v217c0 20-16 36-36 36H152c-20 0-36-16-36-36V127Z" fill="#DCEBE4" stroke="#172D2A" stroke-width="24"/>
+  <path d="M190 168c0-20 16-36 36-36h134c20 0 36 16 36 36v217c0 20-16 36-36 36H226c-20 0-36-16-36-36V168Z" fill="#F7F5EF" stroke="#23675D" stroke-width="24"/>
+  <path d="M162 268h101c22 0 40 18 40 40v4c0 22 18 40 40 40h76" fill="none" stroke="#D18A2E" stroke-width="24" stroke-linecap="round"/>
+</svg>

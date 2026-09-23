@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+backups/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+apps/desktop/src-tauri/resources/ocr/*
+!apps/desktop/src-tauri/resources/ocr/README.md
+!apps/desktop/src-tauri/resources/ocr/resource-lock.json
+
+# Keep last, independently of Docker's build-context exclusions.
+.test-build/
+**/foliora-s3-drill-*/

@@ -1,0 +1,8 @@
+{
+  "name": "@foliora/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {"check": "node --check index.js && node --check test-protocol.mjs", "test": "node test-protocol.mjs"}
+}

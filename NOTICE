@@ -1,0 +1,20 @@
+Foliora NOTICE
+
+Foliora is a provisional product codename. Name, trademark, domain, and package
+availability are not cleared.
+
+This repository contains no customer data or secrets. Builds use third-party
+Rust and JavaScript dependencies under their respective licenses; a generated
+release SBOM and complete dependency-license inventory remain mandatory before
+distribution. Portable archive support uses the Rust `zip` ecosystem; desktop
+clipboard integration uses `tauri-plugin-clipboard-manager` and `arboard`.
+
+Noto Sans Regular is embedded through `ttf-noto-sans` 0.1.2 for searchable
+Vietnamese/English PDF export. The font asset is Apache-2.0 licensed and has
+SHA-256 F1CE78A25F519EF928B5B8755CA230314E47F8821E7AA89ECF000F033F389A9F.
+Upstream crate: https://github.com/gifnksm/ttf-noto-sans
+
+License boundary:
+- Application, service, extension, desktop, and Rust crates: AGPL-3.0-or-later.
+- Independent schema/protocol definitions and conformance samples: Apache-2.0.
+- Brand assets require a separate usage policy before public launch.

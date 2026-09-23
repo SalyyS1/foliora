@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.foliora.invalid/reviewed-bundle/v1",
+  "title": "Foliora Reviewed Bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "domain_schema_version", "id", "purpose", "exported_at", "expires_at", "claims", "evidence"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "domain_schema_version": {"const": 1},
+    "id": {"type": "string", "minLength": 1},
+    "purpose": {"type": "string", "minLength": 1},
+    "exported_at": {"$ref": "#/$defs/timestamp"},
+    "expires_at": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/timestamp"}]},
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/claim"}
+    },
+    "evidence": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/source"}
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "sensitivity": {
+      "enum": ["public", "internal", "private", "highly_sensitive"]
+    },
+    "locator": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["kind", "page"], "properties": {"kind": {"const": "page"}, "page": {"type": "integer", "minimum": 1}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "start", "end"], "properties": {"kind": {"const": "span"}, "start": {"type": "integer", "minimum": 0}, "end": {"type": "integer", "minimum": 1}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "page", "start", "end"], "properties": {"kind": {"const": "page_span"}, "page": {"type": "integer", "minimum": 1}, "start": {"type": "integer", "minimum": 0}, "end": {"type": "integer", "minimum": 1}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "page", "x", "y", "width", "height"], "properties": {"kind": {"const": "region"}, "page": {"type": "integer", "minimum": 1}, "x": {"type": "integer", "minimum": 0}, "y": {"type": "integer", "minimum": 0}, "width": {"type": "integer", "minimum": 1}, "height": {"type": "integer", "minimum": 1}}}
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "locator", "user_entered_at"],
+      "properties": {
+        "source_id": {"type": ["string", "null"]},
+        "locator": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/locator"}]},
+        "user_entered_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "oneOf": [
+        {"properties": {"source_id": {"type": "string", "minLength": 1}, "locator": {"$ref": "#/$defs/locator"}, "user_entered_at": {"type": "null"}}},
+        {"properties": {"source_id": {"type": "null"}, "locator": {"type": "null"}, "user_entered_at": {"$ref": "#/$defs/timestamp"}}}
+      ]
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "claim_type", "subject", "value", "sensitivity", "provenance"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "claim_type": {"type": "string", "minLength": 1},
+        "subject": {"type": "string", "minLength": 1},
+        "value": {},
+        "sensitivity": {"$ref": "#/$defs/sensitivity"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "fingerprint", "media_type", "title", "captured_at"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "media_type": {"type": "string", "minLength": 1},
+        "title": {"type": ["string", "null"]},
+        "captured_at": {"$ref": "#/$defs/timestamp"}
+      }
+    }
+  }
+}

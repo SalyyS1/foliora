@@ -1,0 +1,245 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-drill-tooling:
+    name: Windows drill process and checkpoint regressions
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Test isolated native-process ownership and reports (not S3)
+        shell: pwsh
+        run: ./scripts/test-sync-tooling.ps1
+  windows-native-build:
+    name: Windows native desktop build
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_JOBS: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - run: pnpm install --frozen-lockfile
+      - name: Build the unbundled Tauri binaries
+        shell: pwsh
+        run: |
+          $buildTemp = Join-Path $env:RUNNER_TEMP 'foliora-tauri-temp'
+          $buildTarget = Join-Path $env:RUNNER_TEMP 'foliora-tauri-target'
+          New-Item -ItemType Directory -Force -Path $buildTemp, $buildTarget | Out-Null
+          $env:TEMP = $buildTemp
+          $env:TMP = $buildTemp
+          $env:CARGO_TARGET_DIR = $buildTarget
+          pnpm --filter @foliora/desktop exec -- tauri build --no-bundle
+      - name: Smoke-test native binaries and registration manifest
+        shell: pwsh
+        run: |
+          $release = Join-Path $env:CARGO_TARGET_DIR 'release'
+          $desktop = Join-Path $release 'foliora-desktop.exe'
+          $nativeHost = Join-Path $release 'foliora-native-host.exe'
+          if (!(Test-Path -LiteralPath $desktop) -or !(Test-Path -LiteralPath $nativeHost)) {
+            throw 'Tauri build did not produce both release executables'
+          }
+          $env:FOLIORA_BRIDGE_FILE = Join-Path $env:RUNNER_TEMP 'missing-foliora-bridge.json'
+          $nativeOutput = & $nativeHost 2>&1
+          if ($LASTEXITCODE -eq 0 -or ($nativeOutput -notmatch 'Desktop is not running')) {
+            throw 'Native host did not fail closed when the desktop bridge was absent'
+          }
+          node apps/extension/scripts/install-native-host.mjs --dry-run --host-binary $nativeHost --chromium-extension-id abcdefghijklmnopabcdefghijklmnop | Out-Host
+  rust:
+    name: Rust checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Tauri Linux prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace
+  sync-msrv:
+    name: Workspace MSRV and sync release build (Rust 1.88.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Tauri Linux prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: "1.88.0"
+      - name: Check the complete workspace with the minimum supported Rust version
+        run: cargo check --locked --workspace
+      - name: Build sync service with the minimum supported Rust version
+        run: cargo build --locked --release -p foliora-sync-service
+  javascript:
+    name: JavaScript checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm --filter @foliora/desktop run build
+      - run: pnpm --filter @foliora/site run build
+      - run: pnpm --filter @foliora/site run validate:artifact
+      - run: pnpm audit --prod
+
+  durable-sync:
+    name: Durable PostgreSQL/S3 integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      DATABASE_URL: postgresql://foliora:foliora-ci-postgres@127.0.0.1:5432/foliora
+      FOLIORA_S3_BUCKET: foliora-sync-ci
+      FOLIORA_S3_REGION: us-east-1
+      FOLIORA_S3_ENDPOINT: http://127.0.0.1:9000
+      FOLIORA_S3_ACCESS_KEY_ID: foliora-ci-minio
+      FOLIORA_S3_SECRET_ACCESS_KEY: foliora-ci-minio-secret
+      FOLIORA_S3_ALLOW_HTTP: "1"
+      FOLIORA_BACKUP_FIXTURE_PATH: /tmp/foliora-backup-fixture.json
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: Start disposable PostgreSQL and MinIO
+        run: |
+          docker network create foliora-ci
+          docker run --detach --name foliora-ci-postgres --network foliora-ci --publish 5432:5432 \
+            --env POSTGRES_DB=foliora --env POSTGRES_USER=foliora \
+            --env POSTGRES_PASSWORD=foliora-ci-postgres postgres:17-alpine
+          docker run --detach --name foliora-ci-minio --network foliora-ci --publish 9000:9000 \
+            --env MINIO_ROOT_USER=foliora-ci-minio \
+            --env MINIO_ROOT_PASSWORD=foliora-ci-minio-secret \
+            minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
+          for attempt in {1..40}; do
+            if docker exec foliora-ci-postgres pg_isready -U foliora -d foliora >/dev/null 2>&1 && \
+               docker exec foliora-ci-minio mc ready local >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" = 40 ]; then
+              docker logs foliora-ci-postgres
+              docker logs foliora-ci-minio
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec foliora-ci-minio mc alias set ci http://127.0.0.1:9000 foliora-ci-minio foliora-ci-minio-secret
+          docker exec foliora-ci-minio mc mb --ignore-existing ci/foliora-sync-ci
+      - name: Run durable restart, concurrency, and lockout scenario
+        run: cargo test --locked -p foliora-sync-service --test durable_repository encrypted_object_and_manifest_survive_repository_restart -- --ignored --exact --nocapture
+      - name: Run durable concurrent quota-boundary scenario
+        run: cargo test --locked -p foliora-sync-service --test durable_repository durable_quota_boundaries_are_atomic -- --ignored --exact --nocapture
+      - name: Verify legacy root migration fail-closed boundaries
+        run: cargo test --locked -p foliora-sync-service --test migration_authorization -- --ignored --nocapture
+      - name: Seed backup and restore fixture
+        run: cargo test --locked -p foliora-sync-service --test durable_repository seed_backup_restore_fixture -- --ignored --exact --nocapture
+      - name: Scrub live database and bucket without starting writers
+        run: cargo run --locked -p foliora-sync-service -- --verify-integrity --inventory-jsonl | LC_ALL=C sort > "$RUNNER_TEMP/bucket-sha256.live"
+      - name: Back up PostgreSQL and immutable objects
+        run: |
+          docker exec foliora-ci-postgres pg_dump -U foliora -d foliora --format=custom > "$RUNNER_TEMP/foliora-sync.pgdump"
+          docker exec foliora-ci-minio mc ls --recursive --json ci/foliora-sync-ci | python3 -c 'import json,sys; rows=[json.loads(line) for line in sys.stdin if line.strip()]; print("\n".join(sorted("{}|{}".format(r["key"],r["size"]) for r in rows)))' > "$RUNNER_TEMP/object-listing.live"
+          docker exec foliora-ci-minio sh -c 'rm -rf /tmp/foliora-backup && mc mirror ci/foliora-sync-ci /tmp/foliora-backup'
+          docker exec foliora-ci-minio mc mb --ignore-existing ci/foliora-sync-backup-check
+          docker exec foliora-ci-minio mc mirror /tmp/foliora-backup ci/foliora-sync-backup-check
+          docker exec foliora-ci-minio mc ls --recursive --json ci/foliora-sync-backup-check | python3 -c 'import json,sys; rows=[json.loads(line) for line in sys.stdin if line.strip()]; print("\n".join(sorted("{}|{}".format(r["key"],r["size"]) for r in rows)))' > "$RUNNER_TEMP/object-listing.backup"
+          diff --unified "$RUNNER_TEMP/object-listing.live" "$RUNNER_TEMP/object-listing.backup"
+          docker exec foliora-ci-minio mc rb --force ci/foliora-sync-backup-check
+          docker cp foliora-ci-minio:/tmp/foliora-backup "$RUNNER_TEMP/foliora-object-backup"
+          test -s "$RUNNER_TEMP/foliora-sync.pgdump"
+          test -n "$(find "$RUNNER_TEMP/foliora-object-backup" -type f -print -quit)"
+          inventory_sql="SELECT 'devices',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM devices t UNION ALL SELECT 'heads',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM heads t UNION ALL SELECT 'manifest_objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_objects t UNION ALL SELECT 'manifest_parents',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_parents t UNION ALL SELECT 'manifests',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifests t UNION ALL SELECT 'objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM objects t UNION ALL SELECT 'pending_pairings',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM pending_pairings t UNION ALL SELECT 'vaults',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM vaults t ORDER BY 1"
+          docker exec foliora-ci-postgres psql -U foliora -d foliora -At -c "$inventory_sql" > "$RUNNER_TEMP/database-inventory.before"
+          (cd "$RUNNER_TEMP/foliora-object-backup" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) > "$RUNNER_TEMP/object-inventory.before"
+      - name: Destroy and restore both durable stores
+        run: |
+          docker exec foliora-ci-postgres dropdb --force -U foliora foliora
+          docker exec foliora-ci-postgres createdb -U foliora foliora
+          docker exec foliora-ci-minio mc rb --force ci/foliora-sync-ci
+          docker exec foliora-ci-minio mc mb ci/foliora-sync-ci
+          docker cp "$RUNNER_TEMP/foliora-sync.pgdump" foliora-ci-postgres:/tmp/foliora-sync.pgdump
+          docker exec foliora-ci-postgres pg_restore -U foliora -d foliora --exit-on-error /tmp/foliora-sync.pgdump
+          docker exec foliora-ci-minio sh -c 'rm -rf /tmp/foliora-restore && mkdir -p /tmp/foliora-restore'
+          docker cp "$RUNNER_TEMP/foliora-object-backup/." foliora-ci-minio:/tmp/foliora-restore
+          docker exec foliora-ci-minio mc mirror /tmp/foliora-restore ci/foliora-sync-ci
+      - name: Verify restored credential, object, manifest, and head
+        run: cargo test --locked -p foliora-sync-service --test durable_repository verify_backup_restore_fixture -- --ignored --exact --nocapture
+      - name: Scrub every restored metadata object and payload SHA-256
+        run: |
+          cargo run --locked -p foliora-sync-service -- --verify-integrity --inventory-jsonl | LC_ALL=C sort > "$RUNNER_TEMP/bucket-sha256.restored"
+          diff --unified "$RUNNER_TEMP/bucket-sha256.live" "$RUNNER_TEMP/bucket-sha256.restored"
+      - name: Verify complete database and object inventories
+        run: |
+          inventory_sql="SELECT 'devices',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM devices t UNION ALL SELECT 'heads',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM heads t UNION ALL SELECT 'manifest_objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_objects t UNION ALL SELECT 'manifest_parents',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_parents t UNION ALL SELECT 'manifests',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifests t UNION ALL SELECT 'objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM objects t UNION ALL SELECT 'pending_pairings',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM pending_pairings t UNION ALL SELECT 'vaults',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM vaults t ORDER BY 1"
+          docker exec foliora-ci-postgres psql -U foliora -d foliora -At -c "$inventory_sql" > "$RUNNER_TEMP/database-inventory.after"
+          docker exec foliora-ci-minio sh -c 'rm -rf /tmp/foliora-verify && mc mirror ci/foliora-sync-ci /tmp/foliora-verify'
+          docker exec foliora-ci-minio mc ls --recursive --json ci/foliora-sync-ci | python3 -c 'import json,sys; rows=[json.loads(line) for line in sys.stdin if line.strip()]; print("\n".join(sorted("{}|{}".format(r["key"],r["size"]) for r in rows)))' > "$RUNNER_TEMP/object-listing.restored"
+          docker cp foliora-ci-minio:/tmp/foliora-verify "$RUNNER_TEMP/foliora-object-verify"
+          (cd "$RUNNER_TEMP/foliora-object-verify" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) > "$RUNNER_TEMP/object-inventory.after"
+          diff --unified "$RUNNER_TEMP/database-inventory.before" "$RUNNER_TEMP/database-inventory.after"
+          diff --unified "$RUNNER_TEMP/object-listing.live" "$RUNNER_TEMP/object-listing.restored"
+          diff --unified "$RUNNER_TEMP/object-inventory.before" "$RUNNER_TEMP/object-inventory.after"
+      - name: Verify service readiness after restore
+        env:
+          FOLIORA_SYNC_BOOTSTRAP_TOKEN: foliora-ci-bootstrap-token-with-at-least-32-bytes
+          FOLIORA_SYNC_BIND: 127.0.0.1:8787
+        run: |
+          cargo run --locked -p foliora-sync-service > "$RUNNER_TEMP/foliora-sync-service.log" 2>&1 &
+          service_pid=$!
+          trap 'kill "$service_pid" 2>/dev/null || true; wait "$service_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8787/readyz >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$service_pid" 2>/dev/null; then
+              cat "$RUNNER_TEMP/foliora-sync-service.log"
+              exit 1
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/foliora-sync-service.log"
+          exit 1
+      - name: Show service logs after failure
+        if: failure()
+        run: |
+          docker logs foliora-ci-postgres || true
+          docker logs foliora-ci-minio || true
+      - name: Remove disposable services
+        if: always()
+        run: |
+          docker rm --force foliora-ci-postgres foliora-ci-minio || true
+          docker network rm foliora-ci || true

@@ -1,0 +1,16 @@
+{
+  "name": "foliora-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provisional Foliora monorepo skeleton.",
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "check": "pnpm --recursive check",
+    "test": "pnpm run test:tooling && pnpm --recursive test",
+    "test:tooling": "node --test scripts/build-context.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

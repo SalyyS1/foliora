@@ -1,0 +1,92 @@
+# Local compatibility/reference stack, not a production storage recommendation.
+# MinIO Community is archived/unmaintained; see docs/deployment-guide.md.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: foliora
+      POSTGRES_USER: foliora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - foliora-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U foliora -d foliora"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    restart: unless-stopped
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - foliora-objects:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  create-bucket:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing local/foliora-sync
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+
+  sync:
+    build:
+      context: .
+      dockerfile: services/sync/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      create-bucket:
+        condition: service_completed_successfully
+    environment:
+      FOLIORA_SYNC_BIND: 0.0.0.0:8787
+      FOLIORA_SYNC_BOOTSTRAP_TOKEN: ${SYNC_BOOTSTRAP_TOKEN:?set SYNC_BOOTSTRAP_TOKEN}
+      DATABASE_URL: postgresql://foliora:${POSTGRES_PASSWORD}@postgres:5432/foliora
+      FOLIORA_S3_BUCKET: foliora-sync
+      FOLIORA_S3_REGION: us-east-1
+      FOLIORA_S3_ENDPOINT: http://minio:9000
+      FOLIORA_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      FOLIORA_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      FOLIORA_S3_ALLOW_HTTP: "1"
+      FOLIORA_SYNC_GC_GRACE_SECONDS: ${SYNC_GC_GRACE_SECONDS:-86400}
+      FOLIORA_SYNC_GC_INTERVAL_SECONDS: ${SYNC_GC_INTERVAL_SECONDS:-21600}
+      FOLIORA_SYNC_PAIRING_CLEANUP_SECONDS: ${SYNC_PAIRING_CLEANUP_SECONDS:-60}
+      FOLIORA_SYNC_MAX_VAULT_BYTES: ${SYNC_MAX_VAULT_BYTES:-10737418240}
+      FOLIORA_SYNC_MAX_OBJECTS_PER_VAULT: ${SYNC_MAX_OBJECTS_PER_VAULT:-100000}
+      FOLIORA_SYNC_MAX_MANIFESTS_PER_VAULT: ${SYNC_MAX_MANIFESTS_PER_VAULT:-100000}
+      FOLIORA_SYNC_MAX_MANIFEST_BYTES_PER_VAULT: ${SYNC_MAX_MANIFEST_BYTES_PER_VAULT:-536870912}
+      FOLIORA_SYNC_RATE_PER_CREDENTIAL_PER_MINUTE: ${SYNC_RATE_PER_CREDENTIAL_PER_MINUTE:-240}
+      FOLIORA_SYNC_RATE_PER_CREDENTIAL_BURST: ${SYNC_RATE_PER_CREDENTIAL_BURST:-60}
+      FOLIORA_SYNC_RATE_GLOBAL_PER_MINUTE: ${SYNC_RATE_GLOBAL_PER_MINUTE:-6000}
+      FOLIORA_SYNC_RATE_GLOBAL_BURST: ${SYNC_RATE_GLOBAL_BURST:-600}
+      FOLIORA_SYNC_RATE_MAX_CREDENTIALS: ${SYNC_RATE_MAX_CREDENTIALS:-10000}
+      FOLIORA_SYNC_REQUEST_DEADLINE_SECONDS: ${SYNC_REQUEST_DEADLINE_SECONDS:-120}
+      FOLIORA_SYNC_OBJECT_CONCURRENCY: ${SYNC_OBJECT_CONCURRENCY:-32}
+    ports:
+      - "127.0.0.1:${SYNC_PORT:-8787}:8787"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8787/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  foliora-postgres:
+  foliora-objects:

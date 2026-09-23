@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "domain_schema_version": 1,
+  "id": "bundle:fixture",
+  "purpose": "Project handoff",
+  "exported_at": "2026-09-11T00:00:00Z",
+  "expires_at": null,
+  "claims": [
+    {
+      "id": "claim:fixture",
+      "claim_type": "project.goal",
+      "subject": "project:fixture",
+      "value": "Ship safely",
+      "sensitivity": "internal",
+      "provenance": {
+        "source_id": "source:fixture",
+        "locator": {"kind": "span", "start": 0, "end": 11},
+        "user_entered_at": null
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "id": "source:fixture",
+      "fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "media_type": "text/plain; charset=utf-8",
+      "title": "Synthetic project note",
+      "captured_at": "2026-09-11T00:00:00Z"
+    }
+  ]
+}

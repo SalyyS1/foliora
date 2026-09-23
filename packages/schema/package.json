@@ -1,0 +1,18 @@
+{
+  "name": "@foliora/schema",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./index.js",
+    "./reviewed-bundle-v1.json": "./reviewed-bundle-v1.json"
+  },
+  "scripts": {
+    "check": "node --check index.js && node --check test-schema.mjs",
+    "test": "node test-schema.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@foliora/locales",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "scripts": {"check": "node --check index.js", "test": "node --check index.js"}
+}

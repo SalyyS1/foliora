@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "available": false,
+  "engineVersion": "5.5.0",
+  "executable": {
+    "path": "tesseract.exe",
+    "bytes": 0,
+    "sha256": ""
+  },
+  "models": {
+    "vie": {
+      "path": "tessdata/vie.traineddata",
+      "bytes": 0,
+      "sha256": ""
+    },
+    "eng": {
+      "path": "tessdata/eng.traineddata",
+      "bytes": 0,
+      "sha256": ""
+    }
+  },
+  "runtimeDependencies": []
+}

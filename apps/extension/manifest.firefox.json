@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Foliora — Preview-first fill",
+  "version": "0.1.0",
+  "description": "Fill only reviewed Foliora claims after an exact preview. Never submits forms.",
+  "permissions": ["activeTab", "scripting", "nativeMessaging"],
+  "background": {"scripts": ["background.js"]},
+  "action": {"default_popup": "popup.html", "default_title": "Foliora"},
+  "browser_specific_settings": {"gecko": {"id": "extension@foliora.app", "strict_min_version": "128.0"}}
+}

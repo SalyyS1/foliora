@@ -1,0 +1,18 @@
+{
+  "name": "@foliora/site",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "validate:artifact": "node scripts/validate-artifact.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5"
+  }
+}
