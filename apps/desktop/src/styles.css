@@ -1,4 +1,16 @@
-:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #172d2a; background: #f7f5ef; font-synthesis: none; }
+:root {
+  /*
+   * Keep the desktop shell offline-safe. Inter is not guaranteed to be
+   * installed on Windows and its fallback can render Vietnamese diacritics
+   * inconsistently in a packaged WebView. Segoe UI is present on supported
+   * Windows versions; Noto Sans/Arial Unicode MS cover non-Windows builds.
+   */
+  font-family: "Segoe UI", "Noto Sans", "Arial Unicode MS", Arial, sans-serif;
+  color: #172d2a;
+  background: #f7f5ef;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 78% 0%, #dcebe4 0, transparent 35%), #f7f5ef; }
 button, input, select { font: inherit; }
@@ -13,11 +25,11 @@ header { min-height: 88px; display: flex; align-items: center; justify-content: 
 .language, .outline { border: 1px solid #23675d; color: #174c45; background: transparent; border-radius: 999px; padding: 9px 14px; font-weight: 700; }
 .hero { max-width: 760px; margin: 72px auto 44px; text-align: center; }
 .eyebrow { text-transform: uppercase; letter-spacing: .13em; color: #23675d; font-size: 12px; font-weight: 800; }
-h1 { font-family: Georgia, serif; font-weight: 500; font-size: clamp(42px, 7vw, 76px); line-height: .99; letter-spacing: -.055em; margin: 16px 0 22px; }
+h1 { font-family: Georgia, "Times New Roman", "Segoe UI", serif; font-weight: 500; font-size: clamp(42px, 7vw, 76px); line-height: .99; letter-spacing: -.055em; margin: 16px 0 22px; }
 .subtitle { color: #425a55; font-size: 17px; line-height: 1.65; max-width: 650px; margin: auto; }
 .trust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #172d2a26; border: 1px solid #172d2a26; margin-bottom: 20px; }
 .trust article { padding: 20px; background: #f7f5ef; display: flex; gap: 14px; }
-.trust b { color: #b17024; font: 600 13px Georgia, serif; }
+.trust b { color: #b17024; font: 600 13px Georgia, "Times New Roman", "Segoe UI", serif; }
 .trust strong, .trust span { display: block; }
 .trust strong { font-size: 14px; }
 .trust span { color: #61706d; font-size: 12px; margin-top: 5px; }
@@ -48,7 +60,7 @@ input, select { border: 1px solid #aab5b1; border-radius: 3px; background: #fff;
 .stats article { padding: 22px; text-align: center; border-right: 1px solid #d9dedb; }
 .stats article:last-child { border: 0; }
 .stats b, .stats span { display: block; }
-.stats b { font: 500 34px Georgia, serif; }
+.stats b { font: 500 34px Georgia, "Times New Roman", "Segoe UI", serif; }
 .stats span { margin-top: 5px; color: #60706c; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 .empty-state { padding: 18px; background: #eff4ef; color: #49605b; line-height: 1.55; }
 .auto-lock { margin-top: 22px; display: flex; align-items: center; justify-content: space-between; }
@@ -95,14 +107,14 @@ input, select { border: 1px solid #aab5b1; border-radius: 3px; background: #fff;
 .recovery-code input { margin-top: 2px; }
 .recovery-code .primary { justify-self: start; }
 .recovery-rotate { margin-top: 18px; padding-top: 16px; border-top: 1px solid #d9dedb; }
-.recovery-rotate h4 { margin: 0 0 6px; font: 600 16px Georgia, serif; color: #263f3a; }
+.recovery-rotate h4 { margin: 0 0 6px; font: 600 16px Georgia, "Times New Roman", "Segoe UI", serif; color: #263f3a; }
 .recovery-rotate p { margin: 0 0 12px; color: #60706c; font-size: 12px; line-height: 1.5; }
 .recovery-rotate small { display: block; margin-top: 10px; color: #71451f; font-size: 11px; line-height: 1.45; }
 .recovery-required { margin: 18px 0 0; padding: 14px 16px; border-left: 3px solid #cb773b; background: #fff5e8; color: #71451f; font-size: 12px; line-height: 1.55; }
 .workspace { margin-top: 42px; border-top: 1px solid #d9dedb; padding-top: 36px; }
 .workspace-title { display: flex; justify-content: space-between; align-items: end; gap: 20px; }
 .workspace-title .eyebrow { margin: 0 0 6px; }
-.workspace-title h2 { margin: 0; font: 500 clamp(25px, 4vw, 36px) Georgia, serif; letter-spacing: -.025em; }
+.workspace-title h2 { margin: 0; font: 500 clamp(25px, 4vw, 36px) Georgia, "Times New Roman", "Segoe UI", serif; letter-spacing: -.025em; }
 .workspace-title > span { background: #dcebe4; color: #174c45; border-radius: 999px; padding: 8px 11px; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .import-row { margin-top: 24px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; }
 .import-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

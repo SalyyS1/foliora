@@ -8,6 +8,8 @@ for verified capabilities and remaining production gates.
 
 Foliora helps people turn selected local documents into a clear, reviewable pack with sources. The core product is planned to work offline first; optional AI, sync, and browser filling must stay preview-first and opt-in.
 
+For Vietnamese launch copy, see [docs/marketing-facebook-vi.md](docs/marketing-facebook-vi.md).
+
 ## Tiếng Việt
 
 Foliora là tên tạm thời cho ứng dụng tạo hồ sơ ngữ cảnh cá nhân. Tên này chưa được kiểm tra pháp lý, domain, trademark hoặc registry package.
