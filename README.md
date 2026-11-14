@@ -26,7 +26,7 @@ crates/domain/       Shared Rust domain types and state transitions
 crates/vault/        Argon2id + XChaCha20-Poly1305 encrypted local vault
 crates/ingestion/    Bounded offline text, PDF, email and PNG/JPEG ingestion + OCR contracts
 crates/model/        Preview-first optional OpenAI BYOK suggestion boundary
-crates/export/       Reviewed JSON/PDF + redacted clipboard exports and audit hashes
+crates/export/       Reviewed JSON/PDF/Markdown + redacted clipboard exports and audit hashes
 crates/sync/         E2EE objects, device signatures and revision DAG protocol
 services/sync/       Authenticated PostgreSQL/S3 opaque sync service
 packages/schema/     Apache-2.0 JSON schema definitions
@@ -73,7 +73,11 @@ ranked missing information, requires per-claim approval for private data, and
 writes a full exact-preview JSON payload with an audit SHA-256, rejects stale
 previews, and never overwrites an existing destination. Clipboard export adds an
 exact preview, per-claim redaction, transitive evidence removal, localized safety
-framing, and an audit hash. Portable `.foliora-pack` archives are deterministic
+framing, and an audit hash. Citation-grounded Markdown export (`export_reviewed_markdown`)
+renders deterministic tables with exact source byte/page/region citations (`[E1: p.2, bytes 10..48]`),
+escapes untrusted control and table-breaking characters against prompt or markup injection,
+prunes orphaned evidence transitively when claims are redacted, and emits a SHA-256 audit digest
+for LLM context workflows. Portable `.foliora-pack` archives are deterministic
 standard ZIP files containing only reviewed JSON, a versioned manifest, and a
 localized warning—never original source blobs by default. Searchable PDF export
 embeds Noto Sans, previews the exact cached bytes through binary IPC, invalidates

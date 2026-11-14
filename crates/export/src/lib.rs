@@ -2,6 +2,7 @@
 
 mod archive;
 mod clipboard;
+mod markdown;
 mod pdf;
 
 pub use archive::{
@@ -9,6 +10,7 @@ pub use archive::{
     PortableArchiveManifest,
 };
 pub use clipboard::{export_redacted_clipboard, ClipboardExport, ClipboardLocale};
+pub use markdown::{export_reviewed_markdown, MarkdownExport, MarkdownLocale};
 pub use pdf::{export_reviewed_pdf, PdfExport, PdfLocale};
 
 use foliora_domain::{
