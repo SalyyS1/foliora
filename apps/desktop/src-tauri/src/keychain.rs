@@ -34,11 +34,9 @@ impl std::error::Error for KeychainError {}
 /// Returns a non-secret, versioned keychain account derived from the vault path.
 /// The path itself is never used as a credential-store user name.
 pub(crate) fn account_for_path(path: &Path) -> String {
-    let mut normalized = path.to_string_lossy().replace('\\', "/");
+    let normalized = path.to_string_lossy().replace('\\', "/");
     #[cfg(windows)]
-    {
-        normalized = normalized.to_ascii_lowercase();
-    }
+    let normalized = normalized.to_ascii_lowercase();
     let digest = Sha256::digest(normalized.as_bytes());
     let hex = digest
         .iter()
