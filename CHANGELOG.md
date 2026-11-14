@@ -2,7 +2,19 @@
 
 All notable changes to Foliora are documented here.
 
-## 0.1.0 — 2026-09-23
+## 0.2.0 - 2026-11-14
+
+Context pack verification, indirect prompt-injection scanning, Markdown context export, and dependency security hardening.
+
+### Included
+
+- Added fail-closed `verify_reviewed_bundle` and `verify_portable_archive` in `foliora-export` enforcing schema contracts, canonical UTC timestamps, bundle expiry, referential evidence integrity, orphan-evidence rejection, conflict checks, bounded 16 MiB per-entry ZIP extraction, and constant-time SHA-256 `ExportAuditEvent` binding.
+- Added `scan_bundle_hazards` detecting indirect prompt-injection and smuggling patterns (`FP001` Unicode BiDi controls, `FP002` Plane-14 tag and zero-width characters, `FP003` ChatML/XML/instruction-override markers, and `FP004` external Markdown image beacons) across nested JSON claim values and evidence titles.
+- Added deterministic citation-grounded Markdown context pack exporter (`export_reviewed_markdown`) with control/table-injection escaping and transitive evidence pruning.
+- Upgraded `zip` to 9.5, `object_store` to 0.14, `rustls` to 0.23.46, `rustls-webpki` to 0.103.17, `webpki-roots` to 1.0.12, `quinn-proto` to 0.11.19, and `quinn-udp` to 0.5.16 while preserving Rust 1.88.0 MSRV compatibility and embedding sync SQL migrations without `sqlx-macros`.
+- Added automated GitHub Pages deployment workflow for `@foliora/site` and restored disposable S3 durability CI against `motoserver/moto:5.2.3`.
+
+## 0.1.0 - 2026-09-23
 
 Initial engineering release candidate for review.
 

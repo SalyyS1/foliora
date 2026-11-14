@@ -4,6 +4,7 @@ mod archive;
 mod clipboard;
 mod markdown;
 mod pdf;
+mod verify;
 
 pub use archive::{
     export_portable_archive, ArchiveEntry, ArchiveLocale, PortableArchiveExport,
@@ -12,6 +13,10 @@ pub use archive::{
 pub use clipboard::{export_redacted_clipboard, ClipboardExport, ClipboardLocale};
 pub use markdown::{export_reviewed_markdown, MarkdownExport, MarkdownLocale};
 pub use pdf::{export_reviewed_pdf, PdfExport, PdfLocale};
+pub use verify::{
+    scan_bundle_hazards, verify_portable_archive, verify_reviewed_bundle, BundleVerificationReport,
+    HazardKind, PromptHazard, VerificationError, MAX_ARCHIVE_ENTRY_BYTES,
+};
 
 use foliora_domain::{
     detect_conflicts, validate_canonical_timestamp, BundleDraft, Claim, ClaimStatus, DomainError,

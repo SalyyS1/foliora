@@ -11,16 +11,72 @@ use foliora_sync::{
     validate_vault_id, DeviceRecord, EncryptedObject, SignedManifest, SignedPairingGrant,
 };
 use futures_util::StreamExt;
-use object_store::{path::Path, ObjectMeta, ObjectStore, PutMode, PutOptions};
+use object_store::{path::Path, ObjectMeta, ObjectStore, ObjectStoreExt, PutMode, PutOptions};
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use sqlx::{postgres::PgPoolOptions, PgPool, Postgres, Row, Transaction};
-use std::{sync::Arc, time::Duration};
+use sqlx::{
+    migrate::{Migration, MigrationType, Migrator},
+    postgres::PgPoolOptions,
+    PgPool, Postgres, Row, Transaction,
+};
+use std::{borrow::Cow, sync::Arc, time::Duration};
 use subtle::ConstantTimeEq;
 
 mod integrity;
 pub use integrity::CrossStoreIntegrityReport;
+
+fn embedded_migrator() -> Migrator {
+    Migrator {
+        migrations: Cow::Owned(vec![
+            Migration::new(
+                1,
+                "initial".into(),
+                MigrationType::Simple,
+                Cow::Borrowed(include_str!("../migrations/0001_initial.sql")),
+                false,
+            ),
+            Migration::new(
+                2,
+                "pending pairings".into(),
+                MigrationType::Simple,
+                Cow::Borrowed(include_str!("../migrations/0002_pending_pairings.sql")),
+                false,
+            ),
+            Migration::new(
+                3,
+                "pairing attempts".into(),
+                MigrationType::Simple,
+                Cow::Borrowed(include_str!("../migrations/0003_pairing_attempts.sql")),
+                false,
+            ),
+            Migration::new(
+                4,
+                "retention accounting".into(),
+                MigrationType::Simple,
+                Cow::Borrowed(include_str!("../migrations/0004_retention_accounting.sql")),
+                false,
+            ),
+            Migration::new(
+                5,
+                "device authorizations".into(),
+                MigrationType::Simple,
+                Cow::Borrowed(include_str!("../migrations/0005_device_authorizations.sql")),
+                false,
+            ),
+            Migration::new(
+                6,
+                "staged object gc".into(),
+                MigrationType::Simple,
+                Cow::Borrowed(include_str!("../migrations/0006_staged_object_gc.sql")),
+                false,
+            ),
+        ]),
+        ignore_missing: false,
+        locking: true,
+        no_tx: false,
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,7 +169,7 @@ impl DurableRepository {
             .connect(database_url)
             .await
             .map_err(|error| format!("could not connect to PostgreSQL: {error}"))?;
-        sqlx::migrate!("./migrations")
+        embedded_migrator()
             .run(&pool)
             .await
             .map_err(|error| format!("could not apply sync migrations: {error}"))?;

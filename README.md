@@ -1,6 +1,8 @@
-# Foliora 0.1.0
+# Foliora 0.2.0
 
-Foliora is a provisional product codename for a desktop-first personal context pack app. Name, domain, trademark, and package availability are not cleared yet.
+Foliora is a provisional product codename for a local-first context pack builder and verifier. Name, domain, trademark, and package availability are not cleared yet.
+
+Live preview site: https://salyys1.github.io/foliora/
 
 This repository is an engineering release candidate. See
 [CHANGELOG.md](CHANGELOG.md) and [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
@@ -26,7 +28,7 @@ crates/domain/       Shared Rust domain types and state transitions
 crates/vault/        Argon2id + XChaCha20-Poly1305 encrypted local vault
 crates/ingestion/    Bounded offline text, PDF, email and PNG/JPEG ingestion + OCR contracts
 crates/model/        Preview-first optional OpenAI BYOK suggestion boundary
-crates/export/       Reviewed JSON/PDF/Markdown + redacted clipboard exports and audit hashes
+crates/export/       Reviewed JSON/PDF/Markdown + redacted clipboard exports, SHA-256 audit binding, and prompt-injection hazard verifier
 crates/sync/         E2EE objects, device signatures and revision DAG protocol
 services/sync/       Authenticated PostgreSQL/S3 opaque sync service
 packages/schema/     Apache-2.0 JSON schema definitions
@@ -79,7 +81,13 @@ escapes untrusted control and table-breaking characters against prompt or markup
 prunes orphaned evidence transitively when claims are redacted, and emits a SHA-256 audit digest
 for LLM context workflows. Portable `.foliora-pack` archives are deterministic
 standard ZIP files containing only reviewed JSON, a versioned manifest, and a
-localized warning—never original source blobs by default. Searchable PDF export
+localized warning, never original source blobs by default. On the consumer side,
+`verify_reviewed_bundle` and `verify_portable_archive` (`crates/export`) validate
+schema versions, canonical timestamps, bundle expiry, source SHA-256 fingerprints,
+bijective `ExportAuditEvent` payload hashes, bounded ZIP entry sizes, and indirect
+prompt-injection or Unicode smuggling hazards (`FP001` BiDi controls, `FP002`
+invisible tag characters, `FP003` role-delimiter overrides, and `FP004` external
+Markdown image beacons) before an LLM or downstream reviewer ingests a pack. Searchable PDF export
 embeds Noto Sans, previews the exact cached bytes through binary IPC, invalidates
 that preview on vault changes/lock, and writes only the PDF the user reviewed.
 For PNG/JPEG sources, the desktop discovers only an application-packaged

@@ -248,7 +248,11 @@ pub fn export_reviewed_markdown(
                 let _ = writeln!(md, "| --- | --- | --- | --- | --- | --- |");
             }
             MarkdownLocale::Vietnamese => {
-                let _ = writeln!(md, "## Danh muc nguon chung cu ({})", preview.evidence.len());
+                let _ = writeln!(
+                    md,
+                    "## Danh muc nguon chung cu ({})",
+                    preview.evidence.len()
+                );
                 let _ = writeln!(md);
                 let _ = writeln!(
                     md,
@@ -367,7 +371,9 @@ mod tests {
         .unwrap();
 
         assert!(out.markdown.contains("[E1: p.2, bytes 10..48]"));
-        assert!(out.markdown.contains("Max payload \\| 16 MiB / &lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(out
+            .markdown
+            .contains("Max payload \\| 16 MiB / &lt;script&gt;alert(1)&lt;/script&gt;"));
         assert!(!out.markdown.contains("<script>"));
         assert!(!out.markdown.contains("PRIVATE-RECOVERY-NOTE"));
         assert!(!out.markdown.contains("Private Notes.txt"));

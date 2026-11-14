@@ -48,7 +48,8 @@ jobs:
       - name: Smoke-test native binaries and registration manifest
         shell: pwsh
         run: |
-          $release = Join-Path $env:CARGO_TARGET_DIR 'release'
+          $buildTarget = Join-Path $env:RUNNER_TEMP 'foliora-tauri-target'
+          $release = Join-Path $buildTarget 'release'
           $desktop = Join-Path $release 'foliora-desktop.exe'
           $nativeHost = Join-Path $release 'foliora-native-host.exe'
           if (!(Test-Path -LiteralPath $desktop) -or !(Test-Path -LiteralPath $nativeHost)) {
@@ -130,35 +131,35 @@ jobs:
       FOLIORA_S3_ACCESS_KEY_ID: foliora-ci-minio
       FOLIORA_S3_SECRET_ACCESS_KEY: foliora-ci-minio-secret
       FOLIORA_S3_ALLOW_HTTP: "1"
+      AWS_ACCESS_KEY_ID: foliora-ci-minio
+      AWS_SECRET_ACCESS_KEY: foliora-ci-minio-secret
+      AWS_DEFAULT_REGION: us-east-1
       FOLIORA_BACKUP_FIXTURE_PATH: /tmp/foliora-backup-fixture.json
       RUST_BACKTRACE: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-      - name: Start disposable PostgreSQL and MinIO
+      - name: Start disposable PostgreSQL and S3-compatible store
         run: |
           docker network create foliora-ci
           docker run --detach --name foliora-ci-postgres --network foliora-ci --publish 5432:5432 \
             --env POSTGRES_DB=foliora --env POSTGRES_USER=foliora \
             --env POSTGRES_PASSWORD=foliora-ci-postgres postgres:17-alpine
-          docker run --detach --name foliora-ci-minio --network foliora-ci --publish 9000:9000 \
-            --env MINIO_ROOT_USER=foliora-ci-minio \
-            --env MINIO_ROOT_PASSWORD=foliora-ci-minio-secret \
-            minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
+          docker run --detach --name foliora-ci-s3 --network foliora-ci --publish 9000:5000 \
+            motoserver/moto:5.2.3 -H 0.0.0.0 -p 5000
           for attempt in {1..40}; do
             if docker exec foliora-ci-postgres pg_isready -U foliora -d foliora >/dev/null 2>&1 && \
-               docker exec foliora-ci-minio mc ready local >/dev/null 2>&1; then
+               curl --fail --silent http://127.0.0.1:9000/moto-api/ >/dev/null 2>&1; then
               break
             fi
             if [ "$attempt" = 40 ]; then
               docker logs foliora-ci-postgres
-              docker logs foliora-ci-minio
+              docker logs foliora-ci-s3
               exit 1
             fi
             sleep 2
           done
-          docker exec foliora-ci-minio mc alias set ci http://127.0.0.1:9000 foliora-ci-minio foliora-ci-minio-secret
-          docker exec foliora-ci-minio mc mb --ignore-existing ci/foliora-sync-ci
+          aws --endpoint-url http://127.0.0.1:9000 s3 mb s3://foliora-sync-ci
       - name: Run durable restart, concurrency, and lockout scenario
         run: cargo test --locked -p foliora-sync-service --test durable_repository encrypted_object_and_manifest_survive_repository_restart -- --ignored --exact --nocapture
       - name: Run durable concurrent quota-boundary scenario
@@ -172,14 +173,14 @@ jobs:
       - name: Back up PostgreSQL and immutable objects
         run: |
           docker exec foliora-ci-postgres pg_dump -U foliora -d foliora --format=custom > "$RUNNER_TEMP/foliora-sync.pgdump"
-          docker exec foliora-ci-minio mc ls --recursive --json ci/foliora-sync-ci | python3 -c 'import json,sys; rows=[json.loads(line) for line in sys.stdin if line.strip()]; print("\n".join(sorted("{}|{}".format(r["key"],r["size"]) for r in rows)))' > "$RUNNER_TEMP/object-listing.live"
-          docker exec foliora-ci-minio sh -c 'rm -rf /tmp/foliora-backup && mc mirror ci/foliora-sync-ci /tmp/foliora-backup'
-          docker exec foliora-ci-minio mc mb --ignore-existing ci/foliora-sync-backup-check
-          docker exec foliora-ci-minio mc mirror /tmp/foliora-backup ci/foliora-sync-backup-check
-          docker exec foliora-ci-minio mc ls --recursive --json ci/foliora-sync-backup-check | python3 -c 'import json,sys; rows=[json.loads(line) for line in sys.stdin if line.strip()]; print("\n".join(sorted("{}|{}".format(r["key"],r["size"]) for r in rows)))' > "$RUNNER_TEMP/object-listing.backup"
+          aws --endpoint-url http://127.0.0.1:9000 s3api list-objects-v2 --bucket foliora-sync-ci --output json | python3 -c 'import json,sys; raw=sys.stdin.read().strip(); d=json.loads(raw) if raw else {}; print("\n".join(sorted("{}|{}".format(r["Key"],r["Size"]) for r in d.get("Contents",[]))))' > "$RUNNER_TEMP/object-listing.live"
+          rm -rf "$RUNNER_TEMP/foliora-object-backup" && mkdir -p "$RUNNER_TEMP/foliora-object-backup"
+          aws --endpoint-url http://127.0.0.1:9000 s3 sync s3://foliora-sync-ci "$RUNNER_TEMP/foliora-object-backup" --delete
+          aws --endpoint-url http://127.0.0.1:9000 s3 mb s3://foliora-sync-backup-check
+          aws --endpoint-url http://127.0.0.1:9000 s3 sync "$RUNNER_TEMP/foliora-object-backup" s3://foliora-sync-backup-check --delete
+          aws --endpoint-url http://127.0.0.1:9000 s3api list-objects-v2 --bucket foliora-sync-backup-check --output json | python3 -c 'import json,sys; raw=sys.stdin.read().strip(); d=json.loads(raw) if raw else {}; print("\n".join(sorted("{}|{}".format(r["Key"],r["Size"]) for r in d.get("Contents",[]))))' > "$RUNNER_TEMP/object-listing.backup"
           diff --unified "$RUNNER_TEMP/object-listing.live" "$RUNNER_TEMP/object-listing.backup"
-          docker exec foliora-ci-minio mc rb --force ci/foliora-sync-backup-check
-          docker cp foliora-ci-minio:/tmp/foliora-backup "$RUNNER_TEMP/foliora-object-backup"
+          aws --endpoint-url http://127.0.0.1:9000 s3 rb s3://foliora-sync-backup-check --force
           test -s "$RUNNER_TEMP/foliora-sync.pgdump"
           test -n "$(find "$RUNNER_TEMP/foliora-object-backup" -type f -print -quit)"
           inventory_sql="SELECT 'devices',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM devices t UNION ALL SELECT 'heads',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM heads t UNION ALL SELECT 'manifest_objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_objects t UNION ALL SELECT 'manifest_parents',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_parents t UNION ALL SELECT 'manifests',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifests t UNION ALL SELECT 'objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM objects t UNION ALL SELECT 'pending_pairings',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM pending_pairings t UNION ALL SELECT 'vaults',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM vaults t ORDER BY 1"
@@ -189,13 +190,11 @@ jobs:
         run: |
           docker exec foliora-ci-postgres dropdb --force -U foliora foliora
           docker exec foliora-ci-postgres createdb -U foliora foliora
-          docker exec foliora-ci-minio mc rb --force ci/foliora-sync-ci
-          docker exec foliora-ci-minio mc mb ci/foliora-sync-ci
+          aws --endpoint-url http://127.0.0.1:9000 s3 rb s3://foliora-sync-ci --force
+          aws --endpoint-url http://127.0.0.1:9000 s3 mb s3://foliora-sync-ci
           docker cp "$RUNNER_TEMP/foliora-sync.pgdump" foliora-ci-postgres:/tmp/foliora-sync.pgdump
           docker exec foliora-ci-postgres pg_restore -U foliora -d foliora --exit-on-error /tmp/foliora-sync.pgdump
-          docker exec foliora-ci-minio sh -c 'rm -rf /tmp/foliora-restore && mkdir -p /tmp/foliora-restore'
-          docker cp "$RUNNER_TEMP/foliora-object-backup/." foliora-ci-minio:/tmp/foliora-restore
-          docker exec foliora-ci-minio mc mirror /tmp/foliora-restore ci/foliora-sync-ci
+          aws --endpoint-url http://127.0.0.1:9000 s3 sync "$RUNNER_TEMP/foliora-object-backup" s3://foliora-sync-ci --delete
       - name: Verify restored credential, object, manifest, and head
         run: cargo test --locked -p foliora-sync-service --test durable_repository verify_backup_restore_fixture -- --ignored --exact --nocapture
       - name: Scrub every restored metadata object and payload SHA-256
@@ -206,9 +205,9 @@ jobs:
         run: |
           inventory_sql="SELECT 'devices',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM devices t UNION ALL SELECT 'heads',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM heads t UNION ALL SELECT 'manifest_objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_objects t UNION ALL SELECT 'manifest_parents',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifest_parents t UNION ALL SELECT 'manifests',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM manifests t UNION ALL SELECT 'objects',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM objects t UNION ALL SELECT 'pending_pairings',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM pending_pairings t UNION ALL SELECT 'vaults',count(*),md5(coalesce(string_agg(t::text,E'\\n' ORDER BY t::text),'')) FROM vaults t ORDER BY 1"
           docker exec foliora-ci-postgres psql -U foliora -d foliora -At -c "$inventory_sql" > "$RUNNER_TEMP/database-inventory.after"
-          docker exec foliora-ci-minio sh -c 'rm -rf /tmp/foliora-verify && mc mirror ci/foliora-sync-ci /tmp/foliora-verify'
-          docker exec foliora-ci-minio mc ls --recursive --json ci/foliora-sync-ci | python3 -c 'import json,sys; rows=[json.loads(line) for line in sys.stdin if line.strip()]; print("\n".join(sorted("{}|{}".format(r["key"],r["size"]) for r in rows)))' > "$RUNNER_TEMP/object-listing.restored"
-          docker cp foliora-ci-minio:/tmp/foliora-verify "$RUNNER_TEMP/foliora-object-verify"
+          rm -rf "$RUNNER_TEMP/foliora-object-verify" && mkdir -p "$RUNNER_TEMP/foliora-object-verify"
+          aws --endpoint-url http://127.0.0.1:9000 s3 sync s3://foliora-sync-ci "$RUNNER_TEMP/foliora-object-verify" --delete
+          aws --endpoint-url http://127.0.0.1:9000 s3api list-objects-v2 --bucket foliora-sync-ci --output json | python3 -c 'import json,sys; raw=sys.stdin.read().strip(); d=json.loads(raw) if raw else {}; print("\n".join(sorted("{}|{}".format(r["Key"],r["Size"]) for r in d.get("Contents",[]))))' > "$RUNNER_TEMP/object-listing.restored"
           (cd "$RUNNER_TEMP/foliora-object-verify" && find . -type f -print0 | sort -z | xargs -0 -r sha256sum) > "$RUNNER_TEMP/object-inventory.after"
           diff --unified "$RUNNER_TEMP/database-inventory.before" "$RUNNER_TEMP/database-inventory.after"
           diff --unified "$RUNNER_TEMP/object-listing.live" "$RUNNER_TEMP/object-listing.restored"
@@ -237,9 +236,9 @@ jobs:
         if: failure()
         run: |
           docker logs foliora-ci-postgres || true
-          docker logs foliora-ci-minio || true
+          docker logs foliora-ci-s3 || true
       - name: Remove disposable services
         if: always()
         run: |
-          docker rm --force foliora-ci-postgres foliora-ci-minio || true
+          docker rm --force foliora-ci-postgres foliora-ci-s3 || true
           docker network rm foliora-ci || true

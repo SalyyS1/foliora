@@ -15,15 +15,15 @@ bytes = "1"
 foliora-sync = { path = "../../crates/sync" }
 futures-util = "0.3"
 getrandom = "0.3"
-object_store = { version = "0.12", default-features = false, features = ["aws"] }
+object_store = { version = "0.14", default-features = false, features = ["aws"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "migrate", "macros", "json"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "migrate", "json"] }
 subtle = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
 
 [dev-dependencies]
 http-body-util = "0.1"
-object_store = { version = "0.12", default-features = false, features = ["fs"] }
+object_store = { version = "0.14", default-features = false, features = ["fs"] }
 tower = { version = "0.5", features = ["util"] }

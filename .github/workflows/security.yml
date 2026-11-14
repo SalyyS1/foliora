@@ -23,6 +23,9 @@ jobs:
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # sqlx 0.8 records optional sqlx-mysql (rsa) and sqlx-sqlite (libsqlite3-sys)
+          # in Cargo.lock even when disabled via default-features = false (postgres only).
+          ignore: RUSTSEC-2023-0071, RUSTSEC-2026-0459
 
   node-and-sbom:
     name: Node audit and CycloneDX SBOM

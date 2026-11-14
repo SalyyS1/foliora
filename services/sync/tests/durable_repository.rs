@@ -3,7 +3,9 @@ use foliora_sync::{DeviceIdentity, EncryptedObject, EpochKey, ManifestDraft, Sig
 use foliora_sync_service::{
     durable::DurableRepository, repository::SyncRepository, StorageLimits, StoreOutcome,
 };
-use object_store::{aws::AmazonS3Builder, path::Path, ObjectStore, PutMode, PutOptions};
+use object_store::{
+    aws::AmazonS3Builder, path::Path, ObjectStore, ObjectStoreExt, PutMode, PutOptions,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
