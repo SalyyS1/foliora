@@ -1,18 +1,27 @@
 //! Exact-preview JSON exports built only from reviewed, attributable claims.
 
 mod archive;
+mod budget;
 mod clipboard;
 mod markdown;
 mod pdf;
+mod stream;
 mod verify;
 
 pub use archive::{
     export_portable_archive, ArchiveEntry, ArchiveLocale, PortableArchiveExport,
     PortableArchiveManifest,
 };
+pub use budget::{
+    estimate_pack_tokens, export_budgeted_markdown, BudgetedMarkdownExport, TokenBudgetPolicy,
+};
 pub use clipboard::{export_redacted_clipboard, ClipboardExport, ClipboardLocale};
 pub use markdown::{export_reviewed_markdown, MarkdownExport, MarkdownLocale};
 pub use pdf::{export_reviewed_pdf, PdfExport, PdfLocale};
+pub use stream::{
+    verify_jsonl_stream, write_reviewed_bundle_jsonl, StreamFrame, StreamingPackBuilder,
+    MAX_STREAM_LINE_BYTES,
+};
 pub use verify::{
     scan_bundle_hazards, verify_portable_archive, verify_reviewed_bundle, BundleVerificationReport,
     HazardKind, PromptHazard, VerificationError, MAX_ARCHIVE_ENTRY_BYTES,
@@ -48,6 +57,12 @@ pub enum ExportError {
     AllClaimsRedacted,
     InvalidPdfFont,
     PdfSerialize(String),
+    InvalidTokenBudget(String),
+    TokenBudgetExceeded {
+        required_min_tokens: usize,
+        max_tokens: usize,
+    },
+    Io(String),
 }
 
 impl std::fmt::Display for ExportError {
@@ -75,6 +90,15 @@ impl std::fmt::Display for ExportError {
                 "PDF export requires a valid Unicode TrueType/OpenType font"
             ),
             Self::PdfSerialize(error) => write!(f, "PDF serialization failed: {error}"),
+            Self::InvalidTokenBudget(reason) => write!(f, "invalid token budget policy: {reason}"),
+            Self::TokenBudgetExceeded {
+                required_min_tokens,
+                max_tokens,
+            } => write!(
+                f,
+                "token budget exceeded: minimum pack requires {required_min_tokens} tokens, budget is {max_tokens}"
+            ),
+            Self::Io(error) => write!(f, "stream I/O error: {error}"),
         }
     }
 }

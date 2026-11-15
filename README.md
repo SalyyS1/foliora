@@ -1,8 +1,8 @@
-# Foliora 0.2.0
+# Foliora 0.3.0
 
 Foliora is a provisional product codename for a local-first context pack builder and verifier. Name, domain, trademark, and package availability are not cleared yet.
 
-Live preview site: https://salyys1.github.io/foliora/
+Live preview & client-side bundle verifier: https://salyys1.github.io/foliora/
 
 This repository is an engineering release candidate. See
 [CHANGELOG.md](CHANGELOG.md) and [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
@@ -26,9 +26,9 @@ apps/extension/      Browser extension boundary; preview-first, no submit
 apps/site/           Public site boundary; no production claims before release gate
 crates/domain/       Shared Rust domain types and state transitions
 crates/vault/        Argon2id + XChaCha20-Poly1305 encrypted local vault
-crates/ingestion/    Bounded offline text, PDF, email and PNG/JPEG ingestion + OCR contracts
+crates/ingestion/    Bounded offline text, Markdown, PDF, OOXML .docx, email, PNG/JPEG ingestion + SHA-256 chunk deduplication
 crates/model/        Preview-first optional OpenAI BYOK suggestion boundary
-crates/export/       Reviewed JSON/PDF/Markdown + redacted clipboard exports, SHA-256 audit binding, and prompt-injection hazard verifier
+crates/export/       Reviewed JSON/PDF/Markdown/JSONL-stream exports, token-budget allocator, SHA-256 audit binding, and hazard verifier
 crates/sync/         E2EE objects, device signatures and revision DAG protocol
 services/sync/       Authenticated PostgreSQL/S3 opaque sync service
 packages/schema/     Apache-2.0 JSON schema definitions

@@ -2,6 +2,18 @@
 
 All notable changes to Foliora are documented here.
 
+## 0.3.0 - 2026-11-15
+
+Multi-modal `.docx` ingestion, SHA-256 cross-document chunk deduplication, token-budget Markdown allocation, streaming JSONL context-pack pipeline, and client-side browser bundle unpacker on GitHub Pages.
+
+### Included
+
+- Added bounded offline OOXML `.docx` WordprocessingML ingestion (`import_docx`, `candidate_from_docx_span`) in `foliora-ingestion` with OLE2/OOXML encryption detection (`EncryptedDocx`), fail-closed DTD/XXE rejection, per-entry ZIP decompression caps, table/paragraph extraction, and tracked-deletion (`w:delText`) / field-code (`w:instrText`) exclusion.
+- Added multi-modal sliding-window chunking (`chunk_text`, `chunk_pdf`, `chunk_docx`) with exact UTF-8 byte and PDF page-span provenance plus `ChunkDeduplicator` performing whitespace-normalized SHA-256 deduplication across PDF, DOCX, Markdown, and plain-text sources while retaining cross-source provenance trails.
+- Added `export_budgeted_markdown` (`TokenBudgetPolicy`, `BudgetedMarkdownExport`) in `foliora-export` enforcing hard LLM token ceilings with pinned-claim priority tiers, shared-evidence marginal token cost amortization, and transitive evidence pruning.
+- Added `StreamingPackBuilder`, `write_reviewed_bundle_jsonl`, and `verify_jsonl_stream` in `foliora-export` for incremental SHA-256-bound JSONL context-pack streaming and bounded-memory verification with `FP001`-`FP004` hazard scanning.
+- Upgraded `@foliora/site` (`https://salyys1.github.io/foliora/`) into a zero-upload WebCrypto `.foliora-pack` (`.zip`) unpacker, SHA-256 manifest verifier, `FP001`-`FP004` prompt-injection scanner, `.docx`/`.md`/`.txt` chunk deduplicator, and interactive token-budget lab.
+
 ## 0.2.0 - 2026-11-14
 
 Context pack verification, indirect prompt-injection scanning, Markdown context export, and dependency security hardening.

@@ -3,10 +3,21 @@
 //! Imported content is data only. This crate never interprets text as an
 //! instruction and never performs network or model calls.
 
+mod chunk;
+mod docx;
 mod eml;
 mod image;
 mod tesseract;
 
+pub use chunk::{
+    canonical_chunk_sha256, chunk_docx, chunk_pdf, chunk_text, estimate_tokens, ChunkBatchReport,
+    ChunkDeduplicator, ChunkingConfig, DocumentChunk, DEFAULT_MAX_CHUNK_TOKENS,
+    DEFAULT_OVERLAP_TOKENS,
+};
+pub use docx::{
+    candidate_from_docx_span, import_docx, DocxImportLimits, ImportedDocx, DEFAULT_MAX_DOCX_BYTES,
+    DEFAULT_MAX_DOCX_ENTRIES, DEFAULT_MAX_DOCX_TEXT_BYTES, DEFAULT_MAX_DOCX_XML_BYTES,
+};
 pub use eml::{
     import_eml, EmailAttachment, EmailBody, EmailBodyKind, EmlImportLimits, ImportedEmail,
     DEFAULT_MAX_EML_ATTACHMENT_BYTES, DEFAULT_MAX_EML_BYTES, DEFAULT_MAX_EML_DECODED_BYTES,
@@ -119,6 +130,23 @@ pub enum IngestionError {
     OcrOutputTooLarge,
     InvalidOcrOutput,
     OcrNoText,
+    InvalidDocx,
+    EncryptedDocx,
+    TooManyDocxEntries {
+        actual: usize,
+        limit: usize,
+    },
+    DocxXmlTooLarge {
+        entry: String,
+        limit: usize,
+    },
+    DocxTextTooLarge {
+        actual: usize,
+        limit: usize,
+    },
+    DocxHasNoExtractableText,
+    InvalidDocxLimits,
+    InvalidChunkingConfig,
     Domain(DomainError),
 }
 
@@ -196,6 +224,28 @@ impl std::fmt::Display for IngestionError {
             Self::OcrOutputTooLarge => write!(f, "OCR worker output exceeded its byte limit"),
             Self::InvalidOcrOutput => write!(f, "OCR worker returned malformed TSV output"),
             Self::OcrNoText => write!(f, "OCR found no text regions"),
+            Self::InvalidDocx => write!(f, "source is not a valid supported OOXML .docx document"),
+            Self::EncryptedDocx => {
+                write!(f, "encrypted OOXML .docx document requires prior unlocking")
+            }
+            Self::TooManyDocxEntries { actual, limit } => {
+                write!(f, "DOCX archive has {actual} entries; limit is {limit}")
+            }
+            Self::DocxXmlTooLarge { entry, limit } => write!(
+                f,
+                "DOCX XML entry {entry} exceeds the {limit}-byte decompression limit"
+            ),
+            Self::DocxTextTooLarge { actual, limit } => {
+                write!(f, "DOCX extracted text has {actual} bytes; limit is {limit}")
+            }
+            Self::DocxHasNoExtractableText => write!(f, "DOCX contains no extractable body text"),
+            Self::InvalidDocxLimits => {
+                write!(f, "all DOCX import limits must be greater than zero")
+            }
+            Self::InvalidChunkingConfig => write!(
+                f,
+                "chunking config requires max_chunk_tokens > 0 and overlap_tokens < max_chunk_tokens"
+            ),
             Self::Domain(error) => error.fmt(f),
         }
     }

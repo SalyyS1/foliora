@@ -7,7 +7,7 @@
   "scripts": {
     "build": "vite build",
     "check": "tsc --noEmit",
-    "test": "tsc --noEmit",
+    "test": "tsc --noEmit && node --test scripts/test-pack-engine.mjs",
     "validate:artifact": "node scripts/validate-artifact.mjs"
   },
   "devDependencies": {

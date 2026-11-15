@@ -77,6 +77,7 @@ pub enum VerificationError {
     InvalidArchive(String),
     ArchiveIncludesOriginalSources,
     ArchiveEntryTooLarge(String),
+    InvalidStream(String),
 }
 
 impl std::fmt::Display for VerificationError {
@@ -123,6 +124,7 @@ impl std::fmt::Display for VerificationError {
             Self::ArchiveEntryTooLarge(name) => {
                 write!(f, "archive entry {name} exceeds maximum byte budget")
             }
+            Self::InvalidStream(reason) => write!(f, "invalid streamed context pack: {reason}"),
         }
     }
 }
