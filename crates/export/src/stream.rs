@@ -209,6 +209,17 @@ pub fn write_reviewed_bundle_jsonl<W: Write>(
     Ok(audit_event)
 }
 
+struct StreamHeaderMeta {
+    schema_version: u16,
+    domain_schema_version: u16,
+    bundle_id: String,
+    purpose: String,
+    exported_at: String,
+    expires_at: Option<String>,
+    claim_count: usize,
+    evidence_count: usize,
+}
+
 /// Verifies a streamed JSONL context pack line-by-line with bounded per-frame memory,
 /// constant-time SHA-256 `Audit` frame verification, full `ReviewedBundle` provenance
 /// checks, and `FP001`-`FP004` indirect prompt-injection hazard scanning.
@@ -217,16 +228,7 @@ pub fn verify_jsonl_stream<R: BufRead>(
     verified_at: &str,
 ) -> Result<BundleVerificationReport, VerificationError> {
     let mut hasher = Sha256::new();
-    let mut header_meta: Option<(
-        u16,
-        u16,
-        String,
-        String,
-        String,
-        Option<String>,
-        usize,
-        usize,
-    )> = None;
+    let mut header_meta: Option<StreamHeaderMeta> = None;
     let mut evidence = Vec::new();
     let mut claims = Vec::new();
     let mut audit_event: Option<ExportAuditEvent> = None;
@@ -281,7 +283,7 @@ pub fn verify_jsonl_stream<R: BufRead>(
                     ));
                 }
                 hasher.update(&raw_line);
-                header_meta = Some((
+                header_meta = Some(StreamHeaderMeta {
                     schema_version,
                     domain_schema_version,
                     bundle_id,
@@ -290,7 +292,7 @@ pub fn verify_jsonl_stream<R: BufRead>(
                     expires_at,
                     claim_count,
                     evidence_count,
-                ));
+                });
             }
             StreamFrame::Evidence { source } => {
                 if header_meta.is_none() || !claims.is_empty() {
@@ -321,16 +323,16 @@ pub fn verify_jsonl_stream<R: BufRead>(
         }
     }
 
-    let (
+    let StreamHeaderMeta {
         schema_version,
         domain_schema_version,
         bundle_id,
         purpose,
         exported_at,
         expires_at,
-        expected_claims,
-        expected_evidence,
-    ) = header_meta
+        claim_count: expected_claims,
+        evidence_count: expected_evidence,
+    } = header_meta
         .ok_or_else(|| VerificationError::InvalidStream("missing header frame".into()))?;
     let audit = audit_event
         .ok_or_else(|| VerificationError::InvalidStream("missing audit frame".into()))?;

@@ -554,7 +554,7 @@ mod tests {
     fn multimodal_deduplicator_merges_identical_clauses_across_pdf_docx_and_txt() {
         let shared_clause = "Warranty SLA guarantees 99.95% uptime through 2027-12-31";
         let txt = import_text(
-            format!("Warranty   SLA guarantees\n99.95% uptime through 2027-12-31").as_bytes(),
+            b"Warranty   SLA guarantees\n99.95% uptime through 2027-12-31",
             TextInputKind::PlainText,
             Some("notes.txt".into()),
             CAPTURED.into(),

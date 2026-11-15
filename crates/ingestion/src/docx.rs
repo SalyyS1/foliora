@@ -240,7 +240,7 @@ fn push_bounded_char(out: &mut String, ch: char, limit: usize) -> Result<(), Ing
     push_bounded_str(out, encoded, limit)
 }
 
-fn is_word_tag<'a>(raw_name: &'a str) -> Option<&'a str> {
+fn is_word_tag(raw_name: &str) -> Option<&str> {
     if let Some((prefix, local)) = raw_name.split_once(':') {
         if prefix == "w" {
             Some(local)
