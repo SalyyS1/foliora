@@ -7,6 +7,7 @@ pub mod diff;
 pub mod graph;
 mod markdown;
 mod pdf;
+pub mod signature;
 mod stream;
 mod verify;
 
@@ -23,11 +24,17 @@ pub use diff::{
     CitationOverlapMetrics, ClaimDiff, ClaimModification, EvidenceDiff, EvidenceModification,
 };
 pub use graph::{
-    export_citation_graph, render_dot, render_mermaid, CitationGraphEdge, CitationGraphExport,
-    CitationGraphNode, CitationNodeKind,
+    export_citation_graph, render_dot, render_html, render_mermaid, render_svg, CitationGraphEdge,
+    CitationGraphExport, CitationGraphNode, CitationNodeKind,
 };
 pub use markdown::{export_reviewed_markdown, MarkdownExport, MarkdownLocale};
 pub use pdf::{export_reviewed_pdf, PdfExport, PdfLocale};
+pub use signature::{
+    canonical_bundle_sha256, derive_key_id, generate_signing_keypair, parse_verifying_key,
+    sign_reviewed_bundle, sign_reviewed_bundle_inline, verify_bundle_signature, BundleSignature,
+    GeneratedSigningKeyPair, SignatureError, SignatureVerificationReport, SignedReviewedBundle,
+    PUBLIC_KEY_PREFIX, SECRET_KEY_PREFIX, SIGNATURE_ALGORITHM, SIGNATURE_SCHEMA_VERSION,
+};
 pub use stream::{
     verify_jsonl_stream, write_reviewed_bundle_jsonl, StreamFrame, StreamingPackBuilder,
     MAX_STREAM_LINE_BYTES,

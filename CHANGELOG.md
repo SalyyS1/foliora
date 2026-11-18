@@ -2,6 +2,16 @@
 
 All notable changes to Foliora are documented here.
 
+## 0.5.0 - 2026-11-18
+
+Interactive HTML/SVG citation graph explorer, coordinate-aware native PDF table extraction pipeline, and Ed25519 cryptographic bundle attestation.
+
+### Included
+
+- Added deterministic SVG (`render_svg`) and offline self-contained interactive HTML/SVG (`render_html`, `foliora graph --format html|svg`) citation graph bundle generators in `foliora-export` with 3-tier Bezier lineage layout, interactive node provenance inspection, sensitivity and search filtering, strict Content-Security-Policy, and script-breakout escaping.
+- Added coordinate-aware native PDF table extraction (`extract_pdf_tables`, `extract_pdf_tables_with_password`, `candidate_from_pdf_table_cell`, `foliora tables`) in `foliora-ingestion` decoding bounded PDF content stream operators (`Tm`, `Td`, `TD`, `T*`, `Tf`, `Tj`, `TJ`, `cm`, `q`/`Q`) into user-space `(x, y)` spans, segmenting multi-column tables away from surrounding prose, reconstructing Markdown/CSV/JSON cell matrices, and anchoring cell candidates with `SourceLocator::Region`.
+- Added Ed25519 cryptographic bundle signing and strict verification (`generate_signing_keypair`, `sign_reviewed_bundle`, `sign_reviewed_bundle_inline`, `verify_bundle_signature`, `foliora keygen`, `foliora sign`, `foliora verify-sig`) in `foliora-export` over domain-separated canonical JSON digests (`FOLIORA-REVIEWED-BUNDLE-SIG-V1`) with pinned public-key enforcement and constant-time digest validation.
+
 ## 0.4.0 - 2026-11-18
 
 Structured citation graph exports (DOT and Mermaid), semantic TF-IDF chunk deduplication, streaming context-pack diff engine, and standalone foliora CLI.

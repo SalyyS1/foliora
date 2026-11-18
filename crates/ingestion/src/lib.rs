@@ -7,6 +7,7 @@ mod chunk;
 mod docx;
 mod eml;
 mod image;
+mod pdf_table;
 mod tesseract;
 
 pub use chunk::{
@@ -27,6 +28,10 @@ pub use image::{
     candidate_from_ocr_region, import_image, ImageImportLimits, ImageOrientation, ImportedImage,
     OcrPage, OcrRegion, SupportedImageFormat, DEFAULT_MAX_IMAGE_BYTES,
     DEFAULT_MAX_IMAGE_DECODED_BYTES, DEFAULT_MAX_IMAGE_DIMENSION, DEFAULT_MAX_IMAGE_PIXELS,
+};
+pub use pdf_table::{
+    candidate_from_pdf_table_cell, extract_pdf_tables, extract_pdf_tables_with_password,
+    ExtractedPdfTable, PdfTableBBox, PdfTableCell, PdfTableConfig, PdfTableExtractionReport,
 };
 pub use tesseract::{run_tesseract, TesseractConfig, DEFAULT_MAX_OCR_OUTPUT_BYTES};
 

@@ -67,7 +67,10 @@ pub struct BundleDiffReport {
 
 /// Compares two reviewed bundles and computes exact SHA-256 digests, claim diffs,
 /// evidence provenance shifts, and citation overlap metrics.
-pub fn diff_reviewed_bundles(bundle_a: &ReviewedBundle, bundle_b: &ReviewedBundle) -> BundleDiffReport {
+pub fn diff_reviewed_bundles(
+    bundle_a: &ReviewedBundle,
+    bundle_b: &ReviewedBundle,
+) -> BundleDiffReport {
     let bytes_a = serde_json::to_vec(bundle_a).unwrap_or_default();
     let bytes_b = serde_json::to_vec(bundle_b).unwrap_or_default();
     let sha_a = format!("sha256:{}", hex_digest(&bytes_a));
@@ -221,7 +224,11 @@ pub fn read_bundle_from_jsonl<R: BufRead>(mut reader: R) -> Result<ReviewedBundl
     let mut claims = Vec::new();
 
     let mut line = String::new();
-    while reader.read_line(&mut line).map_err(|e| ExportError::Io(e.to_string()))? > 0 {
+    while reader
+        .read_line(&mut line)
+        .map_err(|e| ExportError::Io(e.to_string()))?
+        > 0
+    {
         let trimmed = line.trim();
         if !trimmed.is_empty() {
             if let Ok(frame) = serde_json::from_str::<StreamFrame>(trimmed) {
@@ -253,8 +260,8 @@ pub fn read_bundle_from_jsonl<R: BufRead>(mut reader: R) -> Result<ReviewedBundl
         line.clear();
     }
 
-    let (schema_version, domain_schema_version, id, purpose, exported_at, expires_at) = header
-        .ok_or_else(|| ExportError::Serialize("JSONL stream missing Header frame".into()))?;
+    let (schema_version, domain_schema_version, id, purpose, exported_at, expires_at) =
+        header.ok_or_else(|| ExportError::Serialize("JSONL stream missing Header frame".into()))?;
 
     Ok(ReviewedBundle {
         schema_version,
@@ -282,23 +289,45 @@ pub fn diff_jsonl_streams<R1: BufRead, R2: BufRead>(
 /// Formats a clean Markdown summary table of the diff.
 pub fn render_diff_markdown(report: &BundleDiffReport) -> String {
     let mut md = String::new();
-    md.push_str(&format!("# Context Pack Diff: {} vs {}\n\n", report.bundle_a_id, report.bundle_b_id));
+    md.push_str(&format!(
+        "# Context Pack Diff: {} vs {}\n\n",
+        report.bundle_a_id, report.bundle_b_id
+    ));
     md.push_str(&format!("**Summary**: {}\n\n", report.summary));
     md.push_str(&format!("- **SHA-256 A**: `{}`\n", report.payload_sha256_a));
     md.push_str(&format!("- **SHA-256 B**: `{}`\n", report.payload_sha256_b));
-    md.push_str(&format!("- **Identical Payload**: {}\n\n", report.identical_payload));
+    md.push_str(&format!(
+        "- **Identical Payload**: {}\n\n",
+        report.identical_payload
+    ));
 
     md.push_str("## Citation Overlap\n\n");
     md.push_str("| Metric | Value |\n| --- | --- |\n");
-    md.push_str(&format!("| Claim Jaccard Similarity | {:.2}% |\n", report.citation_overlap.claim_jaccard * 100.0));
-    md.push_str(&format!("| Evidence Jaccard Similarity | {:.2}% |\n", report.citation_overlap.evidence_jaccard * 100.0));
-    md.push_str(&format!("| Shared Claims | {} / {} |\n", report.citation_overlap.shared_claims_count, report.citation_overlap.total_unique_claims));
-    md.push_str(&format!("| Shared Evidence Sources | {} / {} |\n\n", report.citation_overlap.shared_evidence_count, report.citation_overlap.total_unique_evidence));
+    md.push_str(&format!(
+        "| Claim Jaccard Similarity | {:.2}% |\n",
+        report.citation_overlap.claim_jaccard * 100.0
+    ));
+    md.push_str(&format!(
+        "| Evidence Jaccard Similarity | {:.2}% |\n",
+        report.citation_overlap.evidence_jaccard * 100.0
+    ));
+    md.push_str(&format!(
+        "| Shared Claims | {} / {} |\n",
+        report.citation_overlap.shared_claims_count, report.citation_overlap.total_unique_claims
+    ));
+    md.push_str(&format!(
+        "| Shared Evidence Sources | {} / {} |\n\n",
+        report.citation_overlap.shared_evidence_count,
+        report.citation_overlap.total_unique_evidence
+    ));
 
     if !report.claims.added.is_empty() {
         md.push_str("### Added Claims (+)\n\n");
         for c in &report.claims.added {
-            md.push_str(&format!("- **{}** (`{}`): {:?}\n", c.id, c.claim_type, c.value));
+            md.push_str(&format!(
+                "- **{}** (`{}`): {:?}\n",
+                c.id, c.claim_type, c.value
+            ));
         }
         md.push('\n');
     }
@@ -306,7 +335,10 @@ pub fn render_diff_markdown(report: &BundleDiffReport) -> String {
     if !report.claims.removed.is_empty() {
         md.push_str("### Removed Claims (-)\n\n");
         for c in &report.claims.removed {
-            md.push_str(&format!("- **{}** (`{}`): {:?}\n", c.id, c.claim_type, c.value));
+            md.push_str(&format!(
+                "- **{}** (`{}`): {:?}\n",
+                c.id, c.claim_type, c.value
+            ));
         }
         md.push('\n');
     }
@@ -314,7 +346,10 @@ pub fn render_diff_markdown(report: &BundleDiffReport) -> String {
     if !report.claims.modified.is_empty() {
         md.push_str("### Modified Claims (~)\n\n");
         for m in &report.claims.modified {
-            md.push_str(&format!("- **{}**: {:?} -> {:?} (provenance changed: {})\n", m.id, m.before_value, m.after_value, m.provenance_changed));
+            md.push_str(&format!(
+                "- **{}**: {:?} -> {:?} (provenance changed: {})\n",
+                m.id, m.before_value, m.after_value, m.provenance_changed
+            ));
         }
         md.push('\n');
     }
@@ -328,7 +363,11 @@ mod tests {
     use crate::{ExportedProvenance, ReviewedBundle};
     use foliora_domain::SourceLocator;
 
-    fn make_bundle(id: &str, claims: Vec<ExportedClaim>, evidence: Vec<EvidenceSource>) -> ReviewedBundle {
+    fn make_bundle(
+        id: &str,
+        claims: Vec<ExportedClaim>,
+        evidence: Vec<EvidenceSource>,
+    ) -> ReviewedBundle {
         ReviewedBundle {
             schema_version: 1,
             domain_schema_version: 1,
@@ -392,7 +431,10 @@ mod tests {
                 sample_claim("c:change", "old", Some("s:1")),
                 sample_claim("c:drop", "bye", Some("s:2")),
             ],
-            vec![sample_source("s:1", "sha256:1111"), sample_source("s:2", "sha256:2222")],
+            vec![
+                sample_source("s:1", "sha256:1111"),
+                sample_source("s:2", "sha256:2222"),
+            ],
         );
 
         let b2 = make_bundle(
@@ -402,7 +444,10 @@ mod tests {
                 sample_claim("c:change", "new", Some("s:1")),
                 sample_claim("c:add", "hello", Some("s:3")),
             ],
-            vec![sample_source("s:1", "sha256:1111"), sample_source("s:3", "sha256:3333")],
+            vec![
+                sample_source("s:1", "sha256:1111"),
+                sample_source("s:3", "sha256:3333"),
+            ],
         );
 
         let report = diff_reviewed_bundles(&b1, &b2);
@@ -414,8 +459,14 @@ mod tests {
         assert_eq!(report.claims.removed[0].id, "c:drop");
         assert_eq!(report.claims.modified.len(), 1);
         assert_eq!(report.claims.modified[0].id, "c:change");
-        assert_eq!(report.claims.modified[0].before_value, Value::String("old".into()));
-        assert_eq!(report.claims.modified[0].after_value, Value::String("new".into()));
+        assert_eq!(
+            report.claims.modified[0].before_value,
+            Value::String("old".into())
+        );
+        assert_eq!(
+            report.claims.modified[0].after_value,
+            Value::String("new".into())
+        );
 
         // Evidence: s:1 kept, s:2 removed, s:3 added
         assert_eq!(report.evidence.unchanged_count, 1);

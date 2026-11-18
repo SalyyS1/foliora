@@ -260,7 +260,11 @@ pub fn tfidf_cosine_similarity(text_a: &str, text_b: &str) -> f64 {
     let terms_a = extract_terms(text_a);
     let terms_b = extract_terms(text_b);
     if terms_a.is_empty() && terms_b.is_empty() {
-        return if text_a.trim() == text_b.trim() { 1.0 } else { 0.0 };
+        return if text_a.trim() == text_b.trim() {
+            1.0
+        } else {
+            0.0
+        };
     }
     if terms_a.is_empty() || terms_b.is_empty() {
         return 0.0;
@@ -812,7 +816,9 @@ mod tests {
             id: "c1".into(),
             source_id: "s1".into(),
             media_type: "text/plain".into(),
-            text: "All cryptographic API keys must be stored in encrypted hardware security modules".into(),
+            text:
+                "All cryptographic API keys must be stored in encrypted hardware security modules"
+                    .into(),
             estimated_tokens: 15,
             raw_sha256: "sha256:1111".into(),
             canonical_sha256: "sha256:1111".into(),
@@ -829,7 +835,9 @@ mod tests {
             id: "c2".into(),
             source_id: "s2".into(),
             media_type: "text/plain".into(),
-            text: "All API keys and cryptographic secrets must be stored in hardware security modules".into(),
+            text:
+                "All API keys and cryptographic secrets must be stored in hardware security modules"
+                    .into(),
             estimated_tokens: 15,
             raw_sha256: "sha256:2222".into(),
             canonical_sha256: "sha256:2222".into(),
@@ -846,7 +854,8 @@ mod tests {
             id: "c3".into(),
             source_id: "s3".into(),
             media_type: "text/plain".into(),
-            text: "The annual marketing budget for international travel was approved by leadership".into(),
+            text: "The annual marketing budget for international travel was approved by leadership"
+                .into(),
             estimated_tokens: 12,
             raw_sha256: "sha256:3333".into(),
             canonical_sha256: "sha256:3333".into(),
@@ -860,12 +869,21 @@ mod tests {
 
         let sim_1_2 = tfidf_cosine_similarity(&chunk1.text, &chunk2.text);
         let sim_1_3 = tfidf_cosine_similarity(&chunk1.text, &chunk3.text);
-        assert!(sim_1_2 > 0.65, "expected high similarity between paraphrases, got {sim_1_2}");
-        assert!(sim_1_3 < 0.20, "expected low similarity with unrelated text, got {sim_1_3}");
+        assert!(
+            sim_1_2 > 0.65,
+            "expected high similarity between paraphrases, got {sim_1_2}"
+        );
+        assert!(
+            sim_1_3 < 0.20,
+            "expected low similarity with unrelated text, got {sim_1_3}"
+        );
 
         let mut dedup = ChunkDeduplicator::new().with_semantic_threshold(0.65);
         let added = dedup.ingest_chunks(vec![chunk1, chunk2, chunk3]);
-        assert_eq!(added, 2, "chunk2 should be semantically deduplicated into chunk1");
+        assert_eq!(
+            added, 2,
+            "chunk2 should be semantically deduplicated into chunk1"
+        );
 
         let report = dedup.finish();
         assert_eq!(report.chunks.len(), 2);

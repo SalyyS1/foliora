@@ -11,7 +11,7 @@ fn cli_version_and_help() {
         .expect("failed to execute foliora --version");
     assert!(version_output.status.success());
     let version_str = String::from_utf8_lossy(&version_output.stdout);
-    assert!(version_str.contains("foliora 0.4.0"));
+    assert!(version_str.contains("foliora 0.5.0"));
 
     let help_output = Command::new(bin)
         .arg("--help")
@@ -22,6 +22,9 @@ fn cli_version_and_help() {
     assert!(help_str.contains("SUBCOMMANDS:"));
     assert!(help_str.contains("diff"));
     assert!(help_str.contains("graph"));
+    assert!(help_str.contains("tables"));
+    assert!(help_str.contains("sign"));
+    assert!(help_str.contains("verify-sig"));
 }
 
 #[test]
@@ -184,6 +187,103 @@ fn cli_diff_and_graph_subcommands() {
     assert!(graph_mm.status.success());
     let graph_mm_str = String::from_utf8_lossy(&graph_mm.stdout);
     assert!(graph_mm_str.contains("flowchart LR"));
+
+    // 6. Test foliora graph --format svg and --format html
+    let graph_svg = Command::new(bin)
+        .arg("graph")
+        .arg(&bundle1_path)
+        .arg("--format")
+        .arg("svg")
+        .output()
+        .expect("foliora graph svg failed");
+    assert!(graph_svg.status.success());
+    let graph_svg_str = String::from_utf8_lossy(&graph_svg.stdout);
+    assert!(graph_svg_str.contains("<svg xmlns=\"http://www.w3.org/2000/svg\""));
+
+    let graph_html = Command::new(bin)
+        .arg("graph")
+        .arg(&bundle1_path)
+        .arg("--format")
+        .arg("html")
+        .output()
+        .expect("foliora graph html failed");
+    assert!(graph_html.status.success());
+    let graph_html_str = String::from_utf8_lossy(&graph_html.stdout);
+    assert!(graph_html_str.contains("<!DOCTYPE html>"));
+    assert!(graph_html_str.contains("Foliora Citation Graph: bundle:test-1"));
+
+    // 7. Test foliora keygen, sign, and verify-sig (detached, inline, and tamper fail-closed)
+    let sec_path = dir.join("signer.secret");
+    let pub_path = dir.join("signer.pub");
+    let sig_path = dir.join("bundle1.sig.json");
+    let inline_path = dir.join("bundle1.signed.json");
+
+    let keygen_out = Command::new(bin)
+        .arg("keygen")
+        .arg("--out-secret")
+        .arg(&sec_path)
+        .arg("--out-public")
+        .arg(&pub_path)
+        .output()
+        .expect("foliora keygen failed");
+    assert!(keygen_out.status.success());
+
+    let sign_out = Command::new(bin)
+        .arg("sign")
+        .arg(&bundle1_path)
+        .arg("--key")
+        .arg(&sec_path)
+        .arg("--out")
+        .arg(&sig_path)
+        .output()
+        .expect("foliora sign failed");
+    assert!(sign_out.status.success());
+
+    let verify_ok = Command::new(bin)
+        .arg("verify-sig")
+        .arg(&bundle1_path)
+        .arg("--sig")
+        .arg(&sig_path)
+        .arg("--pubkey")
+        .arg(&pub_path)
+        .output()
+        .expect("foliora verify-sig failed");
+    assert!(verify_ok.status.success());
+    assert!(String::from_utf8_lossy(&verify_ok.stdout).contains("pinned_key=true"));
+
+    // Verify fails closed when signature for bundle1 is checked against bundle2
+    let verify_tampered = Command::new(bin)
+        .arg("verify-sig")
+        .arg(&bundle2_path)
+        .arg("--sig")
+        .arg(&sig_path)
+        .arg("--pubkey")
+        .arg(&pub_path)
+        .output()
+        .expect("foliora verify-sig tampered run failed");
+    assert!(!verify_tampered.status.success());
+
+    // Inline signed bundle roundtrip
+    let sign_inline = Command::new(bin)
+        .arg("sign")
+        .arg(&bundle1_path)
+        .arg("--key")
+        .arg(&sec_path)
+        .arg("--inline")
+        .arg("--out")
+        .arg(&inline_path)
+        .output()
+        .expect("foliora sign --inline failed");
+    assert!(sign_inline.status.success());
+
+    let verify_inline = Command::new(bin)
+        .arg("verify-sig")
+        .arg(&inline_path)
+        .arg("--pubkey")
+        .arg(&pub_path)
+        .output()
+        .expect("foliora verify-sig inline failed");
+    assert!(verify_inline.status.success());
 
     // Clean up
     let _ = fs::remove_dir_all(&dir);
