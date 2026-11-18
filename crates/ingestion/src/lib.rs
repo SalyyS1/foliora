@@ -10,9 +10,9 @@ mod image;
 mod tesseract;
 
 pub use chunk::{
-    canonical_chunk_sha256, chunk_docx, chunk_pdf, chunk_text, estimate_tokens, ChunkBatchReport,
-    ChunkDeduplicator, ChunkingConfig, DocumentChunk, DEFAULT_MAX_CHUNK_TOKENS,
-    DEFAULT_OVERLAP_TOKENS,
+    canonical_chunk_sha256, chunk_docx, chunk_pdf, chunk_text, estimate_tokens,
+    tfidf_cosine_similarity, ChunkBatchReport, ChunkDeduplicator, ChunkingConfig, DocumentChunk,
+    DEFAULT_MAX_CHUNK_TOKENS, DEFAULT_OVERLAP_TOKENS,
 };
 pub use docx::{
     candidate_from_docx_span, import_docx, DocxImportLimits, ImportedDocx, DEFAULT_MAX_DOCX_BYTES,

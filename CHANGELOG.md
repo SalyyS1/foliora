@@ -2,6 +2,17 @@
 
 All notable changes to Foliora are documented here.
 
+## 0.4.0 - 2026-11-18
+
+Structured citation graph exports (DOT and Mermaid), semantic TF-IDF chunk deduplication, streaming context-pack diff engine, and standalone foliora CLI.
+
+### Included
+
+- Added structured citation graph export (`export_citation_graph`, `render_dot`, `render_mermaid`) in `foliora-export` tracing complete evidence attribution chains from evidence sources to reviewed claims with exact locator annotations, deterministic layout styles, script-injection escaping, and SHA-256 audit fingerprint binding.
+- Added semantic chunk deduplication using cosine similarity on TF-IDF vectors (`with_semantic_threshold`, `tfidf_cosine_similarity`) in `foliora-ingestion` alongside exact SHA-256 deduplication, merging paraphrased or near-duplicate clauses into shared evidence chains while tracking `semantic_deduplicated_count` and saving LLM context tokens.
+- Added streaming context-pack diff engine (`diff_reviewed_bundles`, `diff_jsonl_streams`, `render_diff_markdown`) in `foliora-export` computing exact SHA-256 payload digests, claim lifecycle changes (added, removed, modified), evidence provenance modifications, and Jaccard citation overlap metrics.
+- Added standalone `foliora` CLI binary (`crates/export/src/bin/foliora.rs`) supporting `foliora diff <file_a> <file_b> [--format summary|markdown|json]`, `foliora graph <file> [--format dot|mermaid|json]`, and `foliora verify <file>`.
+
 ## 0.3.0 - 2026-11-15
 
 Multi-modal `.docx` ingestion, SHA-256 cross-document chunk deduplication, token-budget Markdown allocation, streaming JSONL context-pack pipeline, and client-side browser bundle unpacker on GitHub Pages.

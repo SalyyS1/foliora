@@ -3,6 +3,8 @@
 mod archive;
 mod budget;
 mod clipboard;
+pub mod diff;
+pub mod graph;
 mod markdown;
 mod pdf;
 mod stream;
@@ -16,6 +18,14 @@ pub use budget::{
     estimate_pack_tokens, export_budgeted_markdown, BudgetedMarkdownExport, TokenBudgetPolicy,
 };
 pub use clipboard::{export_redacted_clipboard, ClipboardExport, ClipboardLocale};
+pub use diff::{
+    diff_jsonl_streams, diff_reviewed_bundles, render_diff_markdown, BundleDiffReport,
+    CitationOverlapMetrics, ClaimDiff, ClaimModification, EvidenceDiff, EvidenceModification,
+};
+pub use graph::{
+    export_citation_graph, render_dot, render_mermaid, CitationGraphEdge, CitationGraphExport,
+    CitationGraphNode, CitationNodeKind,
+};
 pub use markdown::{export_reviewed_markdown, MarkdownExport, MarkdownLocale};
 pub use pdf::{export_reviewed_pdf, PdfExport, PdfLocale};
 pub use stream::{

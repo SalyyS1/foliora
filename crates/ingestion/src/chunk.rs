@@ -4,7 +4,7 @@
 use crate::{hex_digest, ImportedDocx, ImportedPdf, ImportedText, IngestionError};
 use foliora_domain::{SourceLocator, SourceProvenance};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const DEFAULT_MAX_CHUNK_TOKENS: usize = 256;
 pub const DEFAULT_OVERLAP_TOKENS: usize = 32;
@@ -51,6 +51,8 @@ pub struct ChunkBatchReport {
     pub chunks: Vec<DocumentChunk>,
     pub total_input_chunks: usize,
     pub deduplicated_count: usize,
+    #[serde(default)]
+    pub semantic_deduplicated_count: usize,
     pub total_tokens: usize,
     pub saved_tokens: usize,
 }
@@ -201,19 +203,164 @@ pub fn chunk_pdf(
     Ok(out)
 }
 
-/// Multi-document SHA-256 chunk deduplicator preserving cross-source provenance.
+/// Extracts lowercase alphanumeric tokens (min 2 chars) for TF-IDF vectorization.
+pub fn extract_terms(text: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    let mut current = String::new();
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            for lower in ch.to_lowercase() {
+                current.push(lower);
+            }
+        } else if !current.is_empty() {
+            if current.len() >= 2 {
+                terms.push(current.clone());
+            }
+            current.clear();
+        }
+    }
+    if current.len() >= 2 {
+        terms.push(current);
+    }
+    terms
+}
+
+/// Computes term frequency vector normalized by document length.
+pub fn compute_term_frequencies(terms: &[String]) -> BTreeMap<String, f64> {
+    let mut counts = BTreeMap::new();
+    if terms.is_empty() {
+        return counts;
+    }
+    for t in terms {
+        *counts.entry(t.clone()).or_insert(0.0) += 1.0;
+    }
+    let total = terms.len() as f64;
+    for count in counts.values_mut() {
+        *count /= total;
+    }
+    counts
+}
+
+/// Computes the dot product of two L2-normalized sparse vectors.
+pub fn cosine_similarity(vec_a: &BTreeMap<String, f64>, vec_b: &BTreeMap<String, f64>) -> f64 {
+    if vec_a.is_empty() || vec_b.is_empty() {
+        return 0.0;
+    }
+    let mut dot = 0.0;
+    for (term, weight_a) in vec_a {
+        if let Some(weight_b) = vec_b.get(term) {
+            dot += weight_a * weight_b;
+        }
+    }
+    dot.clamp(0.0, 1.0)
+}
+
+/// Computes TF-IDF cosine similarity between two text snippets in [0.0, 1.0].
+pub fn tfidf_cosine_similarity(text_a: &str, text_b: &str) -> f64 {
+    let terms_a = extract_terms(text_a);
+    let terms_b = extract_terms(text_b);
+    if terms_a.is_empty() && terms_b.is_empty() {
+        return if text_a.trim() == text_b.trim() { 1.0 } else { 0.0 };
+    }
+    if terms_a.is_empty() || terms_b.is_empty() {
+        return 0.0;
+    }
+
+    let tf_a = compute_term_frequencies(&terms_a);
+    let tf_b = compute_term_frequencies(&terms_b);
+
+    let mut df: BTreeMap<String, f64> = BTreeMap::new();
+    for term in tf_a.keys() {
+        *df.entry(term.clone()).or_default() += 1.0;
+    }
+    for term in tf_b.keys() {
+        *df.entry(term.clone()).or_default() += 1.0;
+    }
+
+    let mut vec_a = BTreeMap::new();
+    let mut norm_a = 0.0;
+    for (t, tf) in &tf_a {
+        let idf = ((1.0 + 2.0) / (1.0 + df[t])).ln() + 1.0;
+        let w = tf * idf;
+        norm_a += w * w;
+        vec_a.insert(t.clone(), w);
+    }
+    norm_a = norm_a.sqrt();
+    if norm_a > 0.0 {
+        for w in vec_a.values_mut() {
+            *w /= norm_a;
+        }
+    }
+
+    let mut vec_b = BTreeMap::new();
+    let mut norm_b = 0.0;
+    for (t, tf) in &tf_b {
+        let idf = ((1.0 + 2.0) / (1.0 + df[t])).ln() + 1.0;
+        let w = tf * idf;
+        norm_b += w * w;
+        vec_b.insert(t.clone(), w);
+    }
+    norm_b = norm_b.sqrt();
+    if norm_b > 0.0 {
+        for w in vec_b.values_mut() {
+            *w /= norm_b;
+        }
+    }
+
+    cosine_similarity(&vec_a, &vec_b)
+}
+
+fn compute_chunk_tfidf_vector(
+    text: &str,
+    doc_freqs: &BTreeMap<String, usize>,
+    total_docs: usize,
+) -> BTreeMap<String, f64> {
+    let terms = extract_terms(text);
+    let tf = compute_term_frequencies(&terms);
+    let n = (total_docs.max(1) + 1) as f64;
+    let mut vec = BTreeMap::new();
+    let mut norm = 0.0;
+    for (t, freq) in &tf {
+        let df = doc_freqs.get(t).copied().unwrap_or(1) as f64;
+        let idf = (n / (1.0 + df)).ln() + 1.0;
+        let w = freq * idf;
+        norm += w * w;
+        vec.insert(t.clone(), w);
+    }
+    norm = norm.sqrt();
+    if norm > 0.0 {
+        for w in vec.values_mut() {
+            *w /= norm;
+        }
+    }
+    vec
+}
+
+/// Multi-document SHA-256 and semantic TF-IDF chunk deduplicator preserving
+/// cross-source provenance.
 #[derive(Debug, Default)]
 pub struct ChunkDeduplicator {
     ordered_keys: Vec<String>,
     by_canonical: BTreeMap<String, DocumentChunk>,
+    tfidf_vectors: BTreeMap<String, BTreeMap<String, f64>>,
+    doc_freqs: BTreeMap<String, usize>,
+    semantic_threshold: Option<f64>,
     total_input_chunks: usize,
     deduplicated_count: usize,
+    semantic_deduplicated_count: usize,
     saved_tokens: usize,
 }
 
 impl ChunkDeduplicator {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Sets an optional cosine similarity threshold [0.0, 1.0] for semantic deduplication.
+    /// Chunks exceeding this threshold with an existing chunk are merged into its provenance chain.
+    pub fn with_semantic_threshold(mut self, threshold: f64) -> Self {
+        self.semantic_threshold = Some(threshold.clamp(0.0, 1.0));
+        self
     }
 
     pub fn ingest_text(
@@ -248,6 +395,8 @@ impl ChunkDeduplicator {
         let mut added = 0usize;
         for chunk in chunks {
             self.total_input_chunks += 1;
+
+            // 1. Exact canonical SHA-256 match
             if let Some(existing) = self.by_canonical.get_mut(&chunk.canonical_sha256) {
                 self.deduplicated_count += 1;
                 self.saved_tokens += chunk.estimated_tokens;
@@ -267,12 +416,72 @@ impl ChunkDeduplicator {
                         existing.duplicate_provenances.push(extra);
                     }
                 }
-            } else {
-                self.ordered_keys.push(chunk.canonical_sha256.clone());
-                self.by_canonical
-                    .insert(chunk.canonical_sha256.clone(), chunk);
-                added += 1;
+                continue;
             }
+
+            // 2. Semantic TF-IDF cosine similarity match
+            if let Some(threshold) = self.semantic_threshold {
+                let chunk_vec = compute_chunk_tfidf_vector(
+                    &chunk.text,
+                    &self.doc_freqs,
+                    self.ordered_keys.len(),
+                );
+                let mut best_sim = 0.0f64;
+                let mut best_key: Option<String> = None;
+
+                for key in &self.ordered_keys {
+                    if let Some(existing_vec) = self.tfidf_vectors.get(key) {
+                        let sim = cosine_similarity(&chunk_vec, existing_vec);
+                        if sim > best_sim {
+                            best_sim = sim;
+                            best_key = Some(key.clone());
+                        }
+                    }
+                }
+
+                if best_sim >= threshold {
+                    if let Some(k) = best_key {
+                        if let Some(existing) = self.by_canonical.get_mut(&k) {
+                            self.deduplicated_count += 1;
+                            self.semantic_deduplicated_count += 1;
+                            self.saved_tokens += chunk.estimated_tokens;
+                            if existing.primary_provenance != chunk.primary_provenance
+                                && !existing
+                                    .duplicate_provenances
+                                    .contains(&chunk.primary_provenance)
+                            {
+                                existing
+                                    .duplicate_provenances
+                                    .push(chunk.primary_provenance);
+                            }
+                            for extra in chunk.duplicate_provenances {
+                                if existing.primary_provenance != extra
+                                    && !existing.duplicate_provenances.contains(&extra)
+                                {
+                                    existing.duplicate_provenances.push(extra);
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                }
+
+                // If not matched, register terms in doc_freqs and store vector
+                let terms = extract_terms(&chunk.text);
+                let mut seen_in_doc = BTreeSet::new();
+                for t in terms {
+                    if seen_in_doc.insert(t.clone()) {
+                        *self.doc_freqs.entry(t).or_default() += 1;
+                    }
+                }
+                self.tfidf_vectors
+                    .insert(chunk.canonical_sha256.clone(), chunk_vec);
+            }
+
+            self.ordered_keys.push(chunk.canonical_sha256.clone());
+            self.by_canonical
+                .insert(chunk.canonical_sha256.clone(), chunk);
+            added += 1;
         }
         added
     }
@@ -290,6 +499,7 @@ impl ChunkDeduplicator {
             chunks,
             total_input_chunks: self.total_input_chunks,
             deduplicated_count: self.deduplicated_count,
+            semantic_deduplicated_count: self.semantic_deduplicated_count,
             total_tokens,
             saved_tokens: self.saved_tokens,
         }
@@ -594,6 +804,75 @@ mod tests {
         for chunk in &report.chunks {
             chunk.primary_provenance.locator.validate().unwrap();
         }
+    }
+
+    #[test]
+    fn semantic_deduplicator_merges_paraphrased_clauses_with_cosine_similarity() {
+        let chunk1 = DocumentChunk {
+            id: "c1".into(),
+            source_id: "s1".into(),
+            media_type: "text/plain".into(),
+            text: "All cryptographic API keys must be stored in encrypted hardware security modules".into(),
+            estimated_tokens: 15,
+            raw_sha256: "sha256:1111".into(),
+            canonical_sha256: "sha256:1111".into(),
+            primary_provenance: SourceProvenance {
+                source_id: "s1".into(),
+                locator: SourceLocator::Span { start: 0, end: 85 },
+                extractor: None,
+            },
+            duplicate_provenances: Vec::new(),
+        };
+
+        // Highly similar paraphrased clause with different words/order
+        let chunk2 = DocumentChunk {
+            id: "c2".into(),
+            source_id: "s2".into(),
+            media_type: "text/plain".into(),
+            text: "All API keys and cryptographic secrets must be stored in hardware security modules".into(),
+            estimated_tokens: 15,
+            raw_sha256: "sha256:2222".into(),
+            canonical_sha256: "sha256:2222".into(),
+            primary_provenance: SourceProvenance {
+                source_id: "s2".into(),
+                locator: SourceLocator::Span { start: 0, end: 84 },
+                extractor: None,
+            },
+            duplicate_provenances: Vec::new(),
+        };
+
+        // Completely unrelated clause
+        let chunk3 = DocumentChunk {
+            id: "c3".into(),
+            source_id: "s3".into(),
+            media_type: "text/plain".into(),
+            text: "The annual marketing budget for international travel was approved by leadership".into(),
+            estimated_tokens: 12,
+            raw_sha256: "sha256:3333".into(),
+            canonical_sha256: "sha256:3333".into(),
+            primary_provenance: SourceProvenance {
+                source_id: "s3".into(),
+                locator: SourceLocator::Span { start: 0, end: 80 },
+                extractor: None,
+            },
+            duplicate_provenances: Vec::new(),
+        };
+
+        let sim_1_2 = tfidf_cosine_similarity(&chunk1.text, &chunk2.text);
+        let sim_1_3 = tfidf_cosine_similarity(&chunk1.text, &chunk3.text);
+        assert!(sim_1_2 > 0.65, "expected high similarity between paraphrases, got {sim_1_2}");
+        assert!(sim_1_3 < 0.20, "expected low similarity with unrelated text, got {sim_1_3}");
+
+        let mut dedup = ChunkDeduplicator::new().with_semantic_threshold(0.65);
+        let added = dedup.ingest_chunks(vec![chunk1, chunk2, chunk3]);
+        assert_eq!(added, 2, "chunk2 should be semantically deduplicated into chunk1");
+
+        let report = dedup.finish();
+        assert_eq!(report.chunks.len(), 2);
+        assert_eq!(report.deduplicated_count, 1);
+        assert_eq!(report.semantic_deduplicated_count, 1);
+        assert_eq!(report.saved_tokens, 15);
+        assert_eq!(report.chunks[0].duplicate_provenances.len(), 1);
     }
 
     #[test]
