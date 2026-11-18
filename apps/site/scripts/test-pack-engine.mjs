@@ -4,6 +4,8 @@ import {
   allocateBudgetedMarkdown,
   buildBundleFromLocalDocuments,
   buildPortableArchiveZip,
+  exportBundleSarif,
+  rankClaimsHybridRrf,
   renderReviewedMarkdown,
   unpackAndVerifyPortableArchive,
   verifyReviewedBundle,
@@ -126,4 +128,87 @@ test('allocates Markdown within token budget and deduplicates identical SHA-256 
   ]);
   assert.equal(dedup.deduplicatedChunks, 1);
   assert.equal(dedup.bundle.claims.length, 3);
+});
+
+test('detects FP005-FP007 contradictions, exports SARIF v2.1.0, and ranks claims via Hybrid RRF', () => {
+  const bundle = sampleBundle();
+  bundle.claims.push(
+    {
+      id: 'claim:4',
+      claim_type: 'sla.uptime_override',
+      subject: 'sync',
+      value: '98.0% monthly uptime',
+      sensitivity: 'public',
+      provenance: {
+        source_id: 'src:2',
+        locator: { kind: 'span', start: 0, end: 20 },
+        user_entered_at: null,
+      },
+    },
+    {
+      id: 'claim:5',
+      claim_type: 'contract.start',
+      subject: 'legal',
+      value: 'Agreement effective 2027-06-01',
+      sensitivity: 'internal',
+      provenance: {
+        source_id: 'src:2',
+        locator: { kind: 'span', start: 21, end: 51 },
+        user_entered_at: null,
+      },
+    },
+    {
+      id: 'claim:6',
+      claim_type: 'contract.expiry',
+      subject: 'legal',
+      value: 'Agreement expires 2027-01-15',
+      sensitivity: 'internal',
+      provenance: {
+        source_id: 'src:2',
+        locator: { kind: 'span', start: 52, end: 80 },
+        user_entered_at: null,
+      },
+    },
+    {
+      id: 'claim:7',
+      claim_type: 'tls.policy_a',
+      subject: 'transport',
+      value: 'Mutual TLS authentication is required on sync ingress',
+      sensitivity: 'internal',
+      provenance: {
+        source_id: 'src:1',
+        locator: { kind: 'span', start: 0, end: 53 },
+        user_entered_at: null,
+      },
+    },
+    {
+      id: 'claim:8',
+      claim_type: 'tls.policy_b',
+      subject: 'transport',
+      value: 'Mutual TLS authentication is optional on sync ingress',
+      sensitivity: 'internal',
+      provenance: {
+        source_id: 'src:2',
+        locator: { kind: 'span', start: 81, end: 134 },
+        user_entered_at: null,
+      },
+    },
+  );
+
+  const res = verifyReviewedBundle(bundle, '2026-11-15T06:00:00Z');
+  assert.equal(res.ok, true);
+  assert.ok(res.hazards.some((h) => h.rule_id === 'FP005' && h.related_target_id === 'claim:4'));
+  assert.ok(res.hazards.some((h) => h.rule_id === 'FP006' && h.related_target_id === 'claim:6'));
+  assert.ok(res.hazards.some((h) => h.rule_id === 'FP007' && h.related_target_id === 'claim:8'));
+
+  const sarif = exportBundleSarif(bundle, 'bundle.json');
+  assert.equal(sarif.version, '2.1.0');
+  assert.equal(sarif.runs[0].tool.driver.rules.length, 7);
+  assert.ok(sarif.runs[0].results.some((r) => r.ruleId === 'FP005' && r.relatedLocations?.length === 1));
+  assert.ok(sarif.runs[0].results.some((r) => r.ruleId === 'FP006' && r.relatedLocations?.length === 1));
+  assert.ok(sarif.runs[0].results.some((r) => r.ruleId === 'FP007' && r.relatedLocations?.length === 1));
+
+  const hits = rankClaimsHybridRrf(bundle, 'replica ap-southeast-1', 3);
+  assert.ok(hits.length > 0);
+  assert.equal(hits[0].id, 'claim:2');
 });

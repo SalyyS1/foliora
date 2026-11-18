@@ -24,6 +24,9 @@ pub enum HazardKind {
     InvisibleTagSmuggling,
     RoleDelimiterInjection,
     ExternalImageBeacon,
+    NumericalContradiction,
+    TemporalContradiction,
+    PolarityContradiction,
 }
 
 impl HazardKind {
@@ -33,6 +36,9 @@ impl HazardKind {
             Self::InvisibleTagSmuggling => "FP002",
             Self::RoleDelimiterInjection => "FP003",
             Self::ExternalImageBeacon => "FP004",
+            Self::NumericalContradiction => "FP005",
+            Self::TemporalContradiction => "FP006",
+            Self::PolarityContradiction => "FP007",
         }
     }
 }
@@ -42,6 +48,8 @@ pub struct PromptHazard {
     pub rule_id: String,
     pub kind: HazardKind,
     pub target_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub related_target_id: Option<String>,
     pub field: String,
     pub detail: String,
 }
@@ -299,7 +307,7 @@ pub fn verify_portable_archive(
 }
 
 /// Scans all claims and evidence titles inside a `ReviewedBundle` for untrusted prompt
-/// boundary hazards (`FP001`..`FP004`).
+/// boundary hazards (`FP001`..`FP004`) and cross-claim semantic contradictions (`FP005`..`FP007`).
 pub fn scan_bundle_hazards(bundle: &ReviewedBundle) -> Vec<PromptHazard> {
     let mut hazards = Vec::new();
     scan_text_hazards(&bundle.purpose, &bundle.id, "bundle.purpose", &mut hazards);
@@ -310,6 +318,9 @@ pub fn scan_bundle_hazards(bundle: &ReviewedBundle) -> Vec<PromptHazard> {
         if let Some(title) = &source.title {
             scan_text_hazards(title, &source.id, "evidence.title", &mut hazards);
         }
+    }
+    for contradiction in crate::contradiction::scan_bundle_contradictions(bundle) {
+        hazards.push(contradiction.into_prompt_hazard());
     }
     hazards
 }
@@ -615,6 +626,7 @@ fn push_hazard(
         rule_id: kind.rule_id().to_owned(),
         kind,
         target_id: target_id.to_owned(),
+        related_target_id: None,
         field: field.to_owned(),
         detail: detail.to_owned(),
     });

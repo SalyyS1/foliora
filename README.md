@@ -1,4 +1,4 @@
-# Foliora 0.5.0
+# Foliora 0.6.0
 
 Foliora is a provisional product codename for a local-first context pack builder and verifier. Name, domain, trademark, and package availability are not cleared yet.
 
@@ -28,7 +28,7 @@ crates/domain/       Shared Rust domain types and state transitions
 crates/vault/        Argon2id + XChaCha20-Poly1305 encrypted local vault
 crates/ingestion/    Bounded offline text, Markdown, PDF, PDF coordinate table extraction, OOXML .docx, email, PNG/JPEG ingestion + SHA-256 and TF-IDF semantic chunk deduplication
 crates/model/        Preview-first optional OpenAI BYOK suggestion boundary
-crates/export/       Reviewed JSON/PDF/Markdown/JSONL-stream exports, citation graph (DOT/Mermaid/SVG/HTML), Ed25519 bundle signing, streaming diff, token-budget allocator, and hazard verifier
+crates/export/       Reviewed JSON/PDF/Markdown/JSONL-stream exports, citation graph (DOT/Mermaid/SVG/HTML), Ed25519 bundle signing, Hybrid RRF retrieval & IR evaluator, streaming diff, token-budget allocator, FP001-FP007 hazard & contradiction scanner, and OASIS SARIF v2.1.0 exporter
 crates/sync/         E2EE objects, device signatures and revision DAG protocol
 services/sync/       Authenticated PostgreSQL/S3 opaque sync service
 packages/schema/     Apache-2.0 JSON schema definitions
@@ -87,7 +87,11 @@ schema versions, canonical timestamps, bundle expiry, source SHA-256 fingerprint
 bijective `ExportAuditEvent` payload hashes, bounded ZIP entry sizes, and indirect
 prompt-injection or Unicode smuggling hazards (`FP001` BiDi controls, `FP002`
 invisible tag characters, `FP003` role-delimiter overrides, and `FP004` external
-Markdown image beacons) before an LLM or downstream reviewer ingests a pack. Searchable PDF export
+Markdown image beacons) as well as cross-claim/cross-chunk contradictions
+(`FP005` unit-normalized numerical mismatches, `FP006` calendar date or inverted
+lifecycle windows, and `FP007` negation/modal polarity conflicts) with OASIS SARIF v2.1.0
+reporting (`foliora verify --sarif`) and Reciprocal Rank Fusion hybrid BM25+ & dense retrieval
+evaluation (`foliora eval`, `foliora search`) before an LLM or downstream reviewer ingests a pack. Searchable PDF export
 embeds Noto Sans, previews the exact cached bytes through binary IPC, invalidates
 that preview on vault changes/lock, and writes only the PDF the user reviewed.
 For PNG/JPEG sources, the desktop discovers only an application-packaged

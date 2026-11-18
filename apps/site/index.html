@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Foliora - review your sources, unpack .foliora-pack archives, verify SHA-256 provenance, and allocate token-budgeted context packs locally." />
-    <title>Foliora v0.3.0 - Local Context Pack Verifier and Token Budget Lab</title>
+    <title>Foliora v0.6.0 - Local Context Pack Verifier, Contradiction Scanner, and RRF Lab</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
@@ -16,10 +16,10 @@
           <a href="#how-it-works" data-i18n="navHow">Cách hoạt động</a>
           <a href="#workspace" data-i18n="navWorkspace">Trình giải nén &amp; xác minh</a>
           <a href="#principles" data-i18n="navPrinciples">Nguyên tắc</a>
-          <a href="https://github.com/SalyyS1/foliora">GitHub v0.3.0</a>
+          <a href="https://github.com/SalyyS1/foliora">GitHub v0.6.0</a>
         </nav>
         <div class="top-actions">
-          <span class="status-chip"><span class="status-dot" aria-hidden="true"></span><span data-i18n="inDev">v0.3.0 · Local WebCrypto</span></span>
+          <span class="status-chip"><span class="status-dot" aria-hidden="true"></span><span data-i18n="inDev">v0.6.0 · Local WebCrypto</span></span>
           <button class="language-toggle" type="button" data-i18n-aria="languageLabel" aria-label="Switch language" aria-pressed="false"><span class="lang-vi">VI</span><span aria-hidden="true">/</span><span class="lang-en">EN</span></button>
         </div>
       </header>
@@ -43,20 +43,20 @@
           <div class="section-heading"><p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span><span data-i18n="processEyebrow">The review loop</span></p><h2 id="steps-title" data-i18n="processTitle">Ba bước, không có hộp đen.</h2></div>
           <ol class="step-list">
             <li class="step-item is-active"><span class="step-number">01</span><div><h3 data-i18n="step1Title">Nhập gói hoặc tài liệu</h3><p data-i18n="step1Body">Mở file .foliora-pack, .zip, .json, .docx, .md hoặc .txt ngay trong bộ nhớ trình duyệt.</p></div></li>
-            <li class="step-item"><span class="step-number">02</span><div><h3 data-i18n="step2Title">Xác minh SHA-256 &amp; FP001-FP004</h3><p data-i18n="step2Body">Kiểm tra manifest, nguồn mồ côi, mâu thuẫn dữ kiện và ký tự ẩn độc hại.</p></div></li>
-            <li class="step-item"><span class="step-number">03</span><div><h3 data-i18n="step3Title">Phân bổ ngân sách token</h3><p data-i18n="step3Body">Giới hạn ngân sách token, lược bỏ nguồn dư thừa và tải xuống gói chuẩn.</p></div></li>
+            <li class="step-item"><span class="step-number">02</span><div><h3 data-i18n="step2Title">Xác minh SHA-256 &amp; FP001-FP007</h3><p data-i18n="step2Body">Kiểm tra manifest, nguồn mồ côi, mâu thuẫn số liệu/ngày tháng và ký tự ẩn độc hại.</p></div></li>
+            <li class="step-item"><span class="step-number">03</span><div><h3 data-i18n="step3Title">Phân bổ ngân sách token</h3><p data-i18n="step3Body">Giới hạn ngân sách token, lược bỏ nguồn dư thừa và tải xuống gói chuẩn hoặc SARIF v2.1.0.</p></div></li>
           </ol>
         </section>
 
         <section class="workspace" id="workspace" aria-labelledby="workspace-title">
           <div class="workspace-header">
             <div>
-              <p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span><span data-i18n="workspaceEyebrow">Zero-upload browser verifier · v0.3.0</span></p>
+              <p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span><span data-i18n="workspaceEyebrow">Zero-upload browser verifier · v0.6.0</span></p>
               <h2 id="workspace-title" data-i18n="workspaceTitle">Giải nén, xác minh &amp; phân bổ token</h2>
             </div>
             <div class="preset-bar" role="group" aria-label="Inspection presets">
               <button class="button button-secondary preset-btn" type="button" data-preset="clean" data-i18n="presetClean">Mẫu chuẩn (.zip)</button>
-              <button class="button button-secondary preset-btn" type="button" data-preset="hazards" data-i18n="presetHazards">Mẫu FP001-FP004</button>
+              <button class="button button-secondary preset-btn" type="button" data-preset="hazards" data-i18n="presetHazards">Mẫu FP001-FP007</button>
               <button class="button button-secondary preset-btn" type="button" data-preset="tampered" data-i18n="presetTampered">Mẫu sai lệch SHA-256</button>
             </div>
           </div>
@@ -110,6 +110,7 @@
               <div class="action-row">
                 <button class="button button-primary" type="button" data-action="copy-markdown" data-i18n="copyMarkdown">Sao chép Markdown</button>
                 <button class="button button-secondary" type="button" data-action="download-zip" data-i18n="downloadZip">Tải .foliora-pack</button>
+                <button class="button button-secondary" type="button" data-action="download-sarif" data-i18n="downloadSarif">Tải SARIF v2.1.0</button>
               </div>
               <p class="honest-note" id="audit-digest-note">sha256:...</p>
             </section>
@@ -124,9 +125,9 @@
           </div>
         </section>
 
-        <section class="principles" id="principles" aria-labelledby="principles-title"><div><p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span><span data-i18n="principlesEyebrow">What we protect</span></p><h2 id="principles-title" data-i18n="principlesTitle">Quyền quyết định<br /><em>vẫn ở bạn.</em></h2></div><div class="principle-list"><div><span>01</span><p data-i18n="principle1">Nguồn luôn hiển thị. Mọi dữ kiện đều gắn với tọa độ byte hoặc trang gốc kèm mã băm SHA-256.</p></div><div><span>02</span><p data-i18n="principle2">Fail-closed trước mâu thuẫn, nguồn mồ côi và kỹ thuật tiêm chỉ dẫn ẩn (FP001-FP004).</p></div><div><span>03</span><p data-i18n="principle3">Không tuyên bố đã kiểm tra tên, trademark hay domain. Foliora chỉ là tên mã kỹ thuật tạm thời.</p></div></div></section>
+        <section class="principles" id="principles" aria-labelledby="principles-title"><div><p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span><span data-i18n="principlesEyebrow">What we protect</span></p><h2 id="principles-title" data-i18n="principlesTitle">Quyền quyết định<br /><em>vẫn ở bạn.</em></h2></div><div class="principle-list"><div><span>01</span><p data-i18n="principle1">Nguồn luôn hiển thị. Mọi dữ kiện đều gắn với tọa độ byte hoặc trang gốc kèm mã băm SHA-256.</p></div><div><span>02</span><p data-i18n="principle2">Fail-closed trước mâu thuẫn, nguồn mồ côi và kỹ thuật tiêm chỉ dẫn ẩn (FP001-FP007).</p></div><div><span>03</span><p data-i18n="principle3">Không tuyên bố đã kiểm tra tên, trademark hay domain. Foliora chỉ là tên mã kỹ thuật tạm thời.</p></div></div></section>
       </main>
-      <footer class="footer"><span class="wordmark small">* foliora<span class="wordmark-dot">.</span></span><span data-i18n="footerText">Foliora v0.3.0 · xây dựng cho sự minh bạch nguồn dữ liệu</span><span class="footer-meta">2026</span></footer>
+      <footer class="footer"><span class="wordmark small">* foliora<span class="wordmark-dot">.</span></span><span data-i18n="footerText">Foliora v0.6.0 · xây dựng cho sự minh bạch nguồn dữ liệu</span><span class="footer-meta">2026</span></footer>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

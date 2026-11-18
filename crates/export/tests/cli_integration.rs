@@ -11,7 +11,7 @@ fn cli_version_and_help() {
         .expect("failed to execute foliora --version");
     assert!(version_output.status.success());
     let version_str = String::from_utf8_lossy(&version_output.stdout);
-    assert!(version_str.contains("foliora 0.5.0"));
+    assert!(version_str.contains("foliora 0.6.0"));
 
     let help_output = Command::new(bin)
         .arg("--help")
@@ -25,6 +25,9 @@ fn cli_version_and_help() {
     assert!(help_str.contains("tables"));
     assert!(help_str.contains("sign"));
     assert!(help_str.contains("verify-sig"));
+    assert!(help_str.contains("contradictions"));
+    assert!(help_str.contains("eval"));
+    assert!(help_str.contains("search"));
 }
 
 #[test]
@@ -284,6 +287,108 @@ fn cli_diff_and_graph_subcommands() {
         .output()
         .expect("foliora verify-sig inline failed");
     assert!(verify_inline.status.success());
+
+    // 8. Test verify --sarif, contradictions --sarif, search, and eval subcommands
+    let contrad_bundle_path = dir.join("bundle_contrad.json");
+    let contrad_bundle_json = r#"{
+      "schema_version": 1,
+      "domain_schema_version": 1,
+      "id": "bundle:contrad-1",
+      "purpose": "Contradiction audit",
+      "exported_at": "2026-11-18T00:00:00Z",
+      "expires_at": null,
+      "claims": [
+        {
+          "id": "claim:sla-v1",
+          "claim_type": "sla.uptime",
+          "subject": "sync-api",
+          "value": "Monthly uptime SLA is 99.95% and expires on 2027-12-31",
+          "sensitivity": "public",
+          "provenance": {
+            "source_id": "source:doc1",
+            "locator": { "kind": "span", "start": 0, "end": 54 },
+            "user_entered_at": null
+          }
+        },
+        {
+          "id": "claim:sla-v2",
+          "claim_type": "sla.summary",
+          "subject": "sync-api",
+          "value": "Monthly uptime SLA is 99.50% and expires on 2026-06-30",
+          "sensitivity": "public",
+          "provenance": {
+            "source_id": "source:doc1",
+            "locator": { "kind": "span", "start": 55, "end": 109 },
+            "user_entered_at": null
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "id": "source:doc1",
+          "fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "media_type": "text/plain",
+          "title": "SLA Appendix",
+          "captured_at": "2026-11-18T00:00:00Z"
+        }
+      ]
+    }"#;
+    fs::write(&contrad_bundle_path, contrad_bundle_json).unwrap();
+
+    let verify_sarif = Command::new(bin)
+        .arg("verify")
+        .arg(&contrad_bundle_path)
+        .arg("--sarif")
+        .output()
+        .expect("foliora verify --sarif failed");
+    assert!(verify_sarif.status.success());
+    let sarif_str = String::from_utf8_lossy(&verify_sarif.stdout);
+    assert!(sarif_str.contains("\"version\": \"2.1.0\""));
+    assert!(sarif_str.contains("\"FP005\""));
+    assert!(sarif_str.contains("\"FP006\""));
+
+    let search_out = Command::new(bin)
+        .arg("search")
+        .arg(&bundle2_path)
+        .arg("Passkey MFA login")
+        .arg("--mode")
+        .arg("rrf")
+        .output()
+        .expect("foliora search failed");
+    assert!(search_out.status.success());
+    assert!(String::from_utf8_lossy(&search_out.stdout).contains("claim:auth"));
+
+    let bench_path = dir.join("bench.json");
+    let bench_json = r#"{
+      "benchmark_id": "bench:cli-1",
+      "documents": [
+        { "id": "d1", "text": "Argon2id passphrase key derivation salt", "embedding": [0.9, 0.1, 0.0] },
+        { "id": "d2", "text": "S3 bucket orphan garbage collection", "embedding": [0.0, 0.1, 0.9] }
+      ],
+      "queries": [
+        {
+          "query_id": "q1",
+          "query": "Argon2id key derivation",
+          "query_embedding": [0.95, 0.05, 0.0],
+          "relevant_ids": ["d1"]
+        }
+      ]
+    }"#;
+    fs::write(&bench_path, bench_json).unwrap();
+
+    let eval_out = Command::new(bin)
+        .arg("eval")
+        .arg(&bench_path)
+        .arg("--k")
+        .arg("2")
+        .arg("--format")
+        .arg("markdown")
+        .output()
+        .expect("foliora eval failed");
+    assert!(eval_out.status.success());
+    let eval_md = String::from_utf8_lossy(&eval_out.stdout);
+    assert!(eval_md.contains("# Retrieval Evaluation: bench:cli-1"));
+    assert!(eval_md.contains("Hybrid RRF"));
 
     // Clean up
     let _ = fs::remove_dir_all(&dir);

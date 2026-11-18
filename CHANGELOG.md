@@ -2,6 +2,17 @@
 
 All notable changes to Foliora are documented here.
 
+## 0.6.0 - 2026-11-18
+
+Reciprocal Rank Fusion (RRF) hybrid BM25+ and dense retrieval evaluator, cross-chunk numerical/temporal/polarity contradiction detector (`FP005`-`FP007`), and OASIS SARIF v2.1.0 security reporting.
+
+### Included
+
+- Added Reciprocal Rank Fusion (RRF) hybrid retrieval ranker and offline IR benchmark evaluator (`rank_documents`, `rank_bundle_claims`, `evaluate_retrieval_benchmark`, `project_subword_embedding`, `foliora eval`, `foliora search`) in `foliora-export`, combining Okapi BM25+ lexical scoring with caller-supplied dense embeddings or deterministic signed subword projections and computing Recall@K, Precision@K, MRR@K, and nDCG@K deltas across `Bm25Only`, `DenseOnly`, and `HybridRrf` modes.
+- Added cross-chunk and cross-claim semantic contradiction detection (`scan_bundle_contradictions`, `scan_chunk_contradictions`, `scan_segments`, `foliora contradictions`) in `foliora-export`: `FP005` unit-normalized numerical contradictions across byte, duration, percentage, currency, and scalar anchors (recognizing unit-equivalent forms such as `2 GiB == 2048 MiB` while honoring min/max/percentile qualifiers), `FP006` canonical calendar date mismatches and inverted start/expiration lifecycle windows across ISO-8601, slash, and month-name formats, and `FP007` negation and modal polarity contradictions across aligned propositions.
+- Added OASIS SARIF v2.1.0 static analysis export (`export_bundle_sarif`, `export_verification_sarif`, `export_contradictions_sarif`, `foliora verify --sarif`, `foliora contradictions --sarif`) covering `FP001`-`FP007` with source byte/page region mapping, conflicting peer `relatedLocations`, and SHA-256 `partialFingerprints`.
+- Upgraded `@foliora/site` (`v0.6.0`) with client-side `FP005`-`FP007` contradiction scanning, OASIS SARIF v2.1.0 download, and hybrid RRF claim search.
+
 ## 0.5.0 - 2026-11-18
 
 Interactive HTML/SVG citation graph explorer, coordinate-aware native PDF table extraction pipeline, and Ed25519 cryptographic bundle attestation.

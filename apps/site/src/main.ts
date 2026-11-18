@@ -2,6 +2,7 @@ import {
   allocateBudgetedMarkdown,
   buildBundleFromLocalDocuments,
   buildPortableArchiveZip,
+  exportBundleSarif,
   extractLocalDocxText,
   sha256Hex,
   unpackAndVerifyPortableArchive,
@@ -18,7 +19,7 @@ const translations: Record<Language, Record<string, string>> = {
     navHow: 'Cách hoạt động',
     navWorkspace: 'Trình giải nén & xác minh',
     navPrinciples: 'Nguyên tắc',
-    inDev: 'v0.5.0 · Local WebCrypto',
+    inDev: 'v0.6.0 · Local WebCrypto',
     navLabel: 'Điều hướng chính',
     productStatus: 'Trạng thái sản phẩm',
     languageLabel: 'Đổi ngôn ngữ',
@@ -38,14 +39,14 @@ const translations: Record<Language, Record<string, string>> = {
     processTitle: 'Ba bước, không có hộp đen.',
     step1Title: 'Nhập gói hoặc tài liệu',
     step1Body: 'Mở file .foliora-pack, .zip, .json, .docx, .md hoặc .txt ngay trong bộ nhớ trình duyệt.',
-    step2Title: 'Xác minh SHA-256 & FP001-FP004',
-    step2Body: 'Kiểm tra manifest, nguồn mồ côi, mâu thuẫn dữ kiện và ký tự ẩn độc hại.',
+    step2Title: 'Xác minh SHA-256 & FP001-FP007',
+    step2Body: 'Kiểm tra manifest, nguồn mồ côi, mâu thuẫn số liệu/ngày tháng và ký tự ẩn độc hại.',
     step3Title: 'Phân bổ ngân sách token',
-    step3Body: 'Giới hạn ngân sách token, lược bỏ nguồn dư thừa và tải xuống gói chuẩn.',
-    workspaceEyebrow: 'Zero-upload browser verifier · v0.5.0',
+    step3Body: 'Giới hạn ngân sách token, lược bỏ nguồn dư thừa và tải xuống gói chuẩn hoặc SARIF v2.1.0.',
+    workspaceEyebrow: 'Zero-upload browser verifier · v0.6.0',
     workspaceTitle: 'Giải nén, xác minh & phân bổ token',
     presetClean: 'Mẫu chuẩn (.zip)',
-    presetHazards: 'Mẫu FP001-FP004',
+    presetHazards: 'Mẫu FP001-FP007',
     presetTampered: 'Mẫu sai lệch SHA-256',
     readyLocal: 'CHẠY CỤC BỘ',
     importTitle: 'Giải nén gói hoặc tài liệu',
@@ -62,20 +63,21 @@ const translations: Record<Language, Record<string, string>> = {
     included: 'Dữ kiện trong ngân sách',
     copyMarkdown: 'Sao chép Markdown',
     downloadZip: 'Tải .foliora-pack',
+    downloadSarif: 'Tải SARIF v2.1.0',
     markdownPreviewTitle: 'Bản xuất Markdown có trích dẫn nguồn (đã kiểm toán SHA-256)',
     principlesEyebrow: 'What we protect',
     principlesTitle: 'Quyền quyết định|vẫn ở bạn.',
     principle1: 'Nguồn luôn hiển thị. Mọi dữ kiện đều gắn với tọa độ byte hoặc trang gốc kèm mã băm SHA-256.',
-    principle2: 'Fail-closed trước mâu thuẫn, nguồn mồ côi và kỹ thuật tiêm chỉ dẫn ẩn (FP001-FP004).',
+    principle2: 'Fail-closed trước mâu thuẫn, nguồn mồ côi và kỹ thuật tiêm chỉ dẫn ẩn (FP001-FP007).',
     principle3: 'Không tuyên bố đã kiểm tra tên, trademark hay domain. Foliora chỉ là tên mã kỹ thuật tạm thời.',
-    footerText: 'Foliora v0.5.0 · xây dựng cho sự minh bạch nguồn dữ liệu',
+    footerText: 'Foliora v0.6.0 · xây dựng cho sự minh bạch nguồn dữ liệu',
   },
   en: {
     skip: 'Skip to main content',
     navHow: 'How it works',
     navWorkspace: 'Bundle unpacker & verifier',
     navPrinciples: 'Principles',
-    inDev: 'v0.5.0 · Local WebCrypto',
+    inDev: 'v0.6.0 · Local WebCrypto',
     navLabel: 'Main navigation',
     productStatus: 'Product status',
     languageLabel: 'Switch language',
@@ -89,20 +91,20 @@ const translations: Record<Language, Record<string, string>> = {
     readPrinciples: 'Read our principles',
     noteKicker: '100% client-side verification',
     noteBody:
-      'Unpack .foliora-pack (.zip) archives, verify SHA-256 manifest digests, scan FP001-FP004 hazards, and allocate token budgets directly in your browser. Zero bytes leave your machine.',
+      'Unpack .foliora-pack (.zip) archives, verify SHA-256 manifest digests, scan FP001-FP007 hazards and contradictions, and allocate token budgets directly in your browser. Zero bytes leave your machine.',
     noteMeta: 'LOCAL-FIRST · ZERO UPLOAD · SHA-256',
     processEyebrow: 'The review loop',
     processTitle: 'Three steps, no black box.',
     step1Title: 'Drop a pack or documents',
     step1Body: 'Open .foliora-pack, .zip, .json, .docx, .md, or .txt files directly in browser memory.',
-    step2Title: 'Verify SHA-256 & FP001-FP004',
-    step2Body: 'Validate archive manifests, orphan evidence, conflicts, and prompt-injection smuggling.',
+    step2Title: 'Verify SHA-256 & FP001-FP007',
+    step2Body: 'Validate archive manifests, orphan evidence, numerical/date contradictions, and prompt smuggling.',
     step3Title: 'Allocate token budget',
-    step3Body: 'Cap LLM context tokens, prune unreferenced sources transitively, and export a clean pack.',
-    workspaceEyebrow: 'Zero-upload browser verifier · v0.5.0',
+    step3Body: 'Cap LLM context tokens, prune unreferenced sources transitively, and export pack or SARIF v2.1.0.',
+    workspaceEyebrow: 'Zero-upload browser verifier · v0.6.0',
     workspaceTitle: 'Unpack, verify & budget tokens',
     presetClean: 'Clean .foliora-pack (.zip)',
-    presetHazards: 'FP001-FP004 hazard sample',
+    presetHazards: 'FP001-FP007 hazard sample',
     presetTampered: 'Tampered SHA-256 sample',
     readyLocal: 'LOCAL ENGINE',
     importTitle: 'Unpack archive or documents',
@@ -119,13 +121,14 @@ const translations: Record<Language, Record<string, string>> = {
     included: 'Claims within budget',
     copyMarkdown: 'Copy Markdown',
     downloadZip: 'Download .foliora-pack',
+    downloadSarif: 'Download SARIF v2.1.0',
     markdownPreviewTitle: 'Citation-grounded Markdown export (SHA-256 audited)',
     principlesEyebrow: 'What we protect',
     principlesTitle: 'The decision|stays with you.',
     principle1: 'Sources stay visible. Every claim binds to exact byte or page coordinates and SHA-256 source digests.',
-    principle2: 'Fail-closed against conflicting claims, orphan evidence, and indirect prompt-injection hazards (FP001-FP004).',
+    principle2: 'Fail-closed against conflicting claims, orphan evidence, and indirect prompt-injection hazards (FP001-FP007).',
     principle3: 'No claim that the name, trademark, or domain is cleared. Foliora is an engineering codename.',
-    footerText: 'Foliora v0.5.0 · built for source-grounded clarity',
+    footerText: 'Foliora v0.6.0 · built for source-grounded clarity',
   },
 };
 
@@ -210,6 +213,18 @@ function makeHazardPresetBundle(): ReviewedBundle {
       user_entered_at: null,
     },
   };
+  base.claims.push({
+    id: 'claim:sla-uptime-override',
+    claim_type: 'contract.uptime_summary',
+    subject: 'sync-service',
+    value: '98.50% monthly availability under draft addendum',
+    sensitivity: 'public',
+    provenance: {
+      source_id: 'source:retention-docx',
+      locator: { kind: 'span', start: 0, end: 48 },
+      user_entered_at: null,
+    },
+  });
   return base;
 }
 
@@ -299,8 +314,8 @@ async function refreshWorkspaceView(): Promise<void> {
       okBox.className = 'alert-item alert-ok';
       okBox.textContent =
         language === 'vi'
-          ? 'Toàn bộ chữ ký SHA-256, tham chiếu nguồn và kiểm tra FP001-FP004 đều hợp lệ.'
-          : 'All SHA-256 digests, source references, and FP001-FP004 safety checks passed.';
+          ? 'Toàn bộ chữ ký SHA-256, tham chiếu nguồn và kiểm tra FP001-FP007 đều hợp lệ.'
+          : 'All SHA-256 digests, source references, and FP001-FP007 safety checks passed.';
       items.push(okBox);
     }
     for (const err of allErrors) {
@@ -589,6 +604,18 @@ document.querySelector<HTMLButtonElement>('[data-action="download-zip"]')?.addEv
   const link = document.createElement('a');
   link.href = url;
   link.download = `${exportBundle.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.foliora-pack.zip`;
+  link.click();
+  URL.revokeObjectURL(url);
+});
+
+document.querySelector<HTMLButtonElement>('[data-action="download-sarif"]')?.addEventListener('click', () => {
+  const sarif = exportBundleSarif(activeBundle, `${activeBundle.id}.json`);
+  const json = JSON.stringify(sarif, null, 2);
+  const blob = new Blob([json], { type: 'application/sarif+json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${activeBundle.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.sarif.json`;
   link.click();
   URL.revokeObjectURL(url);
 });

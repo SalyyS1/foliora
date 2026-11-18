@@ -3,10 +3,13 @@
 mod archive;
 mod budget;
 mod clipboard;
+pub mod contradiction;
 pub mod diff;
 pub mod graph;
 mod markdown;
 mod pdf;
+pub mod retrieval;
+pub mod sarif;
 pub mod signature;
 mod stream;
 mod verify;
@@ -19,6 +22,10 @@ pub use budget::{
     estimate_pack_tokens, export_budgeted_markdown, BudgetedMarkdownExport, TokenBudgetPolicy,
 };
 pub use clipboard::{export_redacted_clipboard, ClipboardExport, ClipboardLocale};
+pub use contradiction::{
+    scan_bundle_contradictions, scan_chunk_contradictions, scan_segments, ContradictionFinding,
+    ContradictionSegment,
+};
 pub use diff::{
     diff_jsonl_streams, diff_reviewed_bundles, render_diff_markdown, BundleDiffReport,
     CitationOverlapMetrics, ClaimDiff, ClaimModification, EvidenceDiff, EvidenceModification,
@@ -29,6 +36,18 @@ pub use graph::{
 };
 pub use markdown::{export_reviewed_markdown, MarkdownExport, MarkdownLocale};
 pub use pdf::{export_reviewed_pdf, PdfExport, PdfLocale};
+pub use retrieval::{
+    documents_from_bundle, documents_from_chunks, evaluate_retrieval_benchmark,
+    project_subword_embedding, rank_bundle_claims, rank_documents, render_eval_markdown,
+    render_eval_summary, ModeMetrics, PerQueryEval, RetrievalBenchmark, RetrievalConfig,
+    RetrievalDocument, RetrievalError, RetrievalEvalReport, RetrievalHit, RetrievalMode,
+    RetrievalQueryCase,
+};
+pub use sarif::{
+    build_bundle_sarif_log, build_sarif_log_from_hazards, build_sarif_rules, export_bundle_sarif,
+    export_contradictions_sarif, export_verification_sarif, SarifLog, SARIF_SCHEMA_URI,
+    SARIF_VERSION,
+};
 pub use signature::{
     canonical_bundle_sha256, derive_key_id, generate_signing_keypair, parse_verifying_key,
     sign_reviewed_bundle, sign_reviewed_bundle_inline, verify_bundle_signature, BundleSignature,

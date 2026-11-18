@@ -47,8 +47,18 @@ export interface PromptHazard {
   rule_id: string;
   kind: string;
   target_id: string;
+  related_target_id?: string;
   field: string;
   detail: string;
+}
+
+export interface HybridRetrievalHit {
+  id: string;
+  source_id: string | null;
+  rank: number;
+  fused_score: number;
+  bm25_score: number;
+  dense_cosine: number;
 }
 
 export interface BundleVerificationResult {
@@ -106,6 +116,14 @@ export function crc32(bytes: Uint8Array): number;
 export function sha256Hex(bytes: Uint8Array | ArrayBuffer): Promise<string>;
 export function estimatePackTokens(text: string): number;
 export function scanBundleHazards(bundle: ReviewedBundle): PromptHazard[];
+export function scanBundleContradictions(bundle: ReviewedBundle): PromptHazard[];
+export function exportBundleSarif(bundle: ReviewedBundle, artifactUri?: string): Record<string, unknown>;
+export function rankClaimsHybridRrf(
+  bundle: ReviewedBundle,
+  query: string,
+  topK?: number,
+  rrfK?: number,
+): HybridRetrievalHit[];
 export function verifyReviewedBundle(bundle: unknown, verifiedAt?: string): BundleVerificationResult;
 export function readZipEntriesBounded(
   zipBytes: Uint8Array | ArrayBuffer,

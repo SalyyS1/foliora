@@ -192,7 +192,200 @@ export function scanBundleHazards(bundle) {
       scanText(src.title, src.id, 'evidence.title');
     }
   }
+  for (const c of scanBundleContradictions(bundle)) {
+    hazards.push(c);
+  }
   return hazards;
+}
+
+const UNIT_TABLE = {
+  '%': ['pct', 1],
+  percent: ['pct', 1],
+  pct: ['pct', 1],
+  b: ['bytes', 1],
+  byte: ['bytes', 1],
+  bytes: ['bytes', 1],
+  kb: ['bytes', 1e3],
+  kib: ['bytes', 1024],
+  mb: ['bytes', 1e6],
+  mib: ['bytes', 1048576],
+  gb: ['bytes', 1e9],
+  gib: ['bytes', 1073741824],
+  tb: ['bytes', 1e12],
+  tib: ['bytes', 1099511627776],
+  ms: ['sec', 0.001],
+  s: ['sec', 1],
+  sec: ['sec', 1],
+  second: ['sec', 1],
+  seconds: ['sec', 1],
+  min: ['sec', 60],
+  minute: ['sec', 60],
+  minutes: ['sec', 60],
+  h: ['sec', 3600],
+  hour: ['sec', 3600],
+  hours: ['sec', 3600],
+  d: ['sec', 86400],
+  day: ['sec', 86400],
+  days: ['sec', 86400],
+  usd: ['usd', 1],
+};
+
+function flattenClaimValue(val) {
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  if (Array.isArray(val)) return val.map(flattenClaimValue).join(' ');
+  if (val && typeof val === 'object') {
+    return Object.entries(val)
+      .map(([k, v]) => `${k} ${flattenClaimValue(v)}`)
+      .join(' ');
+  }
+  return '';
+}
+
+function stemWord(w) {
+  if (w.length > 5 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  if (w.length > 4 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+  return w;
+}
+
+export function scanBundleContradictions(bundle) {
+  const claims = bundle?.claims ?? [];
+  if (claims.length < 2) return [];
+  const findings = [];
+  const seen = new Set();
+
+  const parsed = claims.map((c) => {
+    const rawText = `${String(c.claim_type ?? '').replace(/[._:-]/g, ' ')} ${flattenClaimValue(c.value)}`;
+    const words = (rawText.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length >= 2);
+    const contentSet = new Set(
+      words
+        .filter((w) => w.length >= 3 && !/^\d+$/.test(w) && !(w in UNIT_TABLE))
+        .map(stemWord),
+    );
+
+    const dates = [];
+    const isoRe = /\b((?:19|20|21)\d{2})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}:\d{2}Z)?\b/g;
+    let dm;
+    while ((dm = isoRe.exec(rawText)) !== null) {
+      const iso = `${dm[1]}-${dm[2]}-${dm[3]}`;
+      const ctx = rawText.slice(Math.max(0, dm.index - 48), dm.index + dm[0].length + 32).toLowerCase();
+      let role = 'milestone';
+      if (/\b(effective|start|starts|signed|begin|begins)\b/.test(ctx)) role = 'start';
+      else if (/\b(expire|expires|expiry|expiration|until|through|end|ends|deadline)\b/.test(ctx)) role = 'end';
+      dates.push({ iso, role });
+    }
+
+    const masked = rawText.replace(isoRe, ' ');
+    const quantities = [];
+    const qtyRe = /(?:^|\s)(\d+(?:,\d{3})*(?:\.\d+)?)\s*(%|(?:percent|pct|kib|mib|gib|tib|kb|mb|gb|tb|bytes?|ms|seconds?|sec|minutes?|hours?|days?|usd)\b)/gi;
+    let qm;
+    while ((qm = qtyRe.exec(masked)) !== null) {
+      const num = Number(qm[1].replace(/,/g, ''));
+      const unitInfo = UNIT_TABLE[qm[2].toLowerCase()];
+      if (Number.isFinite(num) && unitInfo) {
+        const win = masked
+          .slice(Math.max(0, qm.index - 40), qm.index + qm[0].length + 40)
+          .toLowerCase()
+          .match(/[a-z]{3,}/g) ?? [];
+        const anchors = new Set(win.filter((w) => !(w in UNIT_TABLE)).map(stemWord));
+        quantities.push({
+          family: unitInfo[0],
+          canonical: num * unitInfo[1],
+          raw: `${qm[1]} ${qm[2]}`.trim(),
+          anchors,
+        });
+      }
+    }
+
+    const polarities = [];
+    const polMap = {
+      enabled: ['enabled_state', 1],
+      disabled: ['enabled_state', -1],
+      required: ['requirement_state', 1],
+      mandatory: ['requirement_state', 1],
+      optional: ['requirement_state', -1],
+      allowed: ['permission_state', 1],
+      prohibited: ['permission_state', -1],
+      forbidden: ['permission_state', -1],
+      encrypted: ['encryption_state', 1],
+      unencrypted: ['encryption_state', -1],
+    };
+    for (let i = 0; i < words.length; i += 1) {
+      const p = polMap[words[i]];
+      if (p) {
+        const neg = words.slice(Math.max(0, i - 3), i).some((prev) => ['not', 'never', 'no', 'without', 'cannot'].includes(prev));
+        polarities.push({ pred: p[0], sign: neg ? -p[1] : p[1], raw: neg ? `not ${words[i]}` : words[i] });
+      }
+    }
+
+    return {
+      id: c.id,
+      subject: String(c.subject ?? '').trim().toLowerCase(),
+      contentSet,
+      dates,
+      quantities,
+      polarities,
+    };
+  });
+
+  const emit = (ruleId, kind, a, b, detail) => {
+    const key = [a.id, b.id].sort().join('|') + `|${ruleId}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    findings.push({
+      rule_id: ruleId,
+      kind,
+      target_id: a.id,
+      related_target_id: b.id,
+      field: 'claim.value',
+      detail,
+    });
+  };
+
+  for (let i = 0; i < parsed.length; i += 1) {
+    for (let j = i + 1; j < parsed.length; j += 1) {
+      const a = parsed[i];
+      const b = parsed[j];
+      if (!a.subject || a.subject !== b.subject) continue;
+
+      for (const qa of a.quantities) {
+        for (const qb of b.quantities) {
+          if (qa.family !== qb.family) continue;
+          const shared = [...qa.anchors].filter((x) => qb.anchors.has(x));
+          if (shared.length === 0) continue;
+          const denom = Math.max(Math.abs(qa.canonical), Math.abs(qb.canonical), 1e-9);
+          if (Math.abs(qa.canonical - qb.canonical) / denom > 1e-6) {
+            emit('FP005', 'numerical_contradiction', a, b, `conflicting values for '${shared[0]}': '${qa.raw}' vs '${qb.raw}'`);
+          }
+        }
+      }
+
+      for (const da of a.dates) {
+        for (const db of b.dates) {
+          if (da.role === 'start' && db.role === 'end' && da.iso > db.iso) {
+            emit('FP006', 'temporal_contradiction', a, b, `inverted lifecycle window: start ${da.iso} is after expiry ${db.iso}`);
+          } else if (da.role === 'end' && db.role === 'start' && db.iso > da.iso) {
+            emit('FP006', 'temporal_contradiction', a, b, `inverted lifecycle window: start ${db.iso} is after expiry ${da.iso}`);
+          } else if (da.role === db.role && da.iso !== db.iso) {
+            emit('FP006', 'temporal_contradiction', a, b, `conflicting ${da.role} dates: ${da.iso} vs ${db.iso}`);
+          }
+        }
+      }
+
+      const sharedContent = [...a.contentSet].filter((x) => b.contentSet.has(x));
+      if (sharedContent.length >= 1) {
+        for (const pa of a.polarities) {
+          for (const pb of b.polarities) {
+            if (pa.pred === pb.pred && pa.sign !== pb.sign) {
+              emit('FP007', 'polarity_contradiction', a, b, `opposing polarity on '${pa.pred}': '${pa.raw}' vs '${pb.raw}'`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return findings;
 }
 
 function validateLocator(locator) {
@@ -1002,4 +1195,163 @@ export async function buildBundleFromLocalDocuments(docs, capturedAt = '2026-11-
     },
     deduplicatedChunks,
   };
+}
+
+const SARIF_RULES = [
+  { id: 'FP001', name: 'BidiControlSmuggling', level: 'error', severity: '8.5', short: 'Unicode bidirectional override or isolate control detected' },
+  { id: 'FP002', name: 'InvisibleTagSmuggling', level: 'error', severity: '8.2', short: 'Invisible Plane-14 tag or zero-width character smuggling detected' },
+  { id: 'FP003', name: 'RoleDelimiterInjection', level: 'error', severity: '9.1', short: 'Indirect prompt-injection role delimiter or override directive detected' },
+  { id: 'FP004', name: 'ExternalImageBeacon', level: 'warning', severity: '7.4', short: 'External Markdown image URL capable of data exfiltration detected' },
+  { id: 'FP005', name: 'NumericalContradiction', level: 'warning', severity: '6.8', short: 'Cross-chunk or cross-claim unit-normalized numerical contradiction' },
+  { id: 'FP006', name: 'TemporalContradiction', level: 'warning', severity: '6.8', short: 'Cross-chunk or cross-claim calendar date or lifecycle window contradiction' },
+  { id: 'FP007', name: 'PolarityContradiction', level: 'warning', severity: '6.5', short: 'Cross-chunk or cross-claim negation or modal polarity contradiction' },
+];
+
+export function exportBundleSarif(bundle, artifactUri = 'reviewed-bundle.json') {
+  const hazards = scanBundleHazards(bundle);
+  const claimsById = new Map((bundle?.claims ?? []).map((c) => [c.id, c]));
+  const ruleIndexMap = new Map(SARIF_RULES.map((r, i) => [r.id, i]));
+
+  const results = hazards.map((h) => {
+    const idx = ruleIndexMap.get(h.rule_id) ?? 0;
+    const spec = SARIF_RULES[idx];
+    const claim = claimsById.get(h.target_id);
+    const uri = claim?.provenance?.source_id ?? artifactUri;
+    const relatedLocations = [];
+    if (h.related_target_id) {
+      const peer = claimsById.get(h.related_target_id);
+      relatedLocations.push({
+        id: 1,
+        message: { text: `Conflicting peer target ${h.related_target_id}` },
+        physicalLocation: { artifactLocation: { uri: peer?.provenance?.source_id ?? artifactUri } },
+        logicalLocations: [{ name: h.related_target_id, fullyQualifiedName: `${h.related_target_id}::${h.field}`, kind: 'claim' }],
+      });
+    }
+    return {
+      ruleId: h.rule_id,
+      ruleIndex: idx,
+      level: spec.level,
+      message: { text: h.detail },
+      locations: [
+        {
+          physicalLocation: { artifactLocation: { uri } },
+          logicalLocations: [{ name: h.target_id, fullyQualifiedName: `${h.target_id}::${h.field}`, kind: 'claim' }],
+        },
+      ],
+      ...(relatedLocations.length > 0 ? { relatedLocations } : {}),
+    };
+  });
+
+  return {
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+    version: '2.1.0',
+    runs: [
+      {
+        tool: {
+          driver: {
+            name: 'foliora',
+            version: '0.6.0',
+            informationUri: 'https://github.com/SalyyS1/foliora',
+            rules: SARIF_RULES.map((r) => ({
+              id: r.id,
+              name: r.name,
+              shortDescription: { text: r.short },
+              defaultConfiguration: { level: r.level },
+              properties: { 'security-severity': r.severity },
+            })),
+          },
+        },
+        results,
+        invocations: [{ executionSuccessful: true }],
+      },
+    ],
+  };
+}
+
+function projectSubwordJs(text, dim = 128) {
+  const vec = new Float64Array(dim);
+  const normText = `^${String(text ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}$`;
+  for (let n = 3; n <= 4; n += 1) {
+    for (let i = 0; i + n <= normText.length; i += 1) {
+      const gram = normText.slice(i, i + n);
+      let h = 2166136261 >>> 0;
+      for (let k = 0; k < gram.length; k += 1) {
+        h ^= gram.charCodeAt(k);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+      const bucket = h % dim;
+      const sign = (h & 0x80000000) === 0 ? 1 : -1;
+      vec[bucket] += sign;
+    }
+  }
+  let sq = 0;
+  for (let i = 0; i < dim; i += 1) sq += vec[i] * vec[i];
+  const norm = Math.sqrt(sq);
+  if (norm > 0) {
+    for (let i = 0; i < dim; i += 1) vec[i] /= norm;
+  }
+  return vec;
+}
+
+export function rankClaimsHybridRrf(bundle, query, topK = 5, rrfK = 60) {
+  const claims = bundle?.claims ?? [];
+  if (claims.length === 0 || !String(query ?? '').trim()) return [];
+
+  const docs = claims.map((c) => {
+    const text = `${c.subject} ${c.claim_type} ${flattenClaimValue(c.value)}`;
+    const toks = (text.toLowerCase().match(/[a-z0-9]{2,}/g) ?? []);
+    return { id: c.id, source_id: c.provenance?.source_id ?? null, text, toks };
+  });
+
+  const qTerms = [...new Set((String(query).toLowerCase().match(/[a-z0-9]{2,}/g) ?? []))];
+  const avgdl = docs.reduce((s, d) => s + d.toks.length, 0) / Math.max(1, docs.length);
+  const df = new Map();
+  for (const d of docs) {
+    for (const t of new Set(d.toks)) df.set(t, (df.get(t) ?? 0) + 1);
+  }
+
+  const bm25Scores = docs.map((d) => {
+    let score = 0;
+    for (const qt of qTerms) {
+      const nQi = df.get(qt) ?? 0;
+      if (nQi === 0) continue;
+      const idf = Math.log(1 + (docs.length - nQi + 0.5) / (nQi + 0.5));
+      if (idf <= 0) continue;
+      const tf = d.toks.filter((t) => t === qt).length;
+      if (tf === 0) continue;
+      score += idf * ((tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * (d.toks.length / Math.max(1, avgdl)))) + 1.0);
+    }
+    return score;
+  });
+
+  const qVec = projectSubwordJs(query);
+  const denseScores = docs.map((d) => {
+    const dVec = projectSubwordJs(d.text);
+    let dot = 0;
+    for (let i = 0; i < qVec.length; i += 1) dot += qVec[i] * dVec[i];
+    return Math.max(0, dot);
+  });
+
+  const bm25Order = docs.map((_, i) => i).filter((i) => bm25Scores[i] > 0).sort((a, b) => bm25Scores[b] - bm25Scores[a]);
+  const denseOrder = docs.map((_, i) => i).filter((i) => denseScores[i] > 0).sort((a, b) => denseScores[b] - denseScores[a]);
+  const bm25Rank = new Map(bm25Order.map((docIdx, pos) => [docIdx, pos + 1]));
+  const denseRank = new Map(denseOrder.map((docIdx, pos) => [docIdx, pos + 1]));
+
+  return docs
+    .map((d, idx) => {
+      let fused = 0;
+      if (bm25Rank.has(idx)) fused += 1 / (rrfK + bm25Rank.get(idx));
+      if (denseRank.has(idx)) fused += 1 / (rrfK + denseRank.get(idx));
+      return {
+        id: d.id,
+        source_id: d.source_id,
+        fused_score: fused,
+        bm25_score: bm25Scores[idx],
+        dense_cosine: denseScores[idx],
+      };
+    })
+    .filter((h) => h.fused_score > 0)
+    .sort((a, b) => b.fused_score - a.fused_score || b.bm25_score - a.bm25_score)
+    .slice(0, Math.max(1, topK))
+    .map((h, i) => ({ ...h, rank: i + 1 }));
 }
