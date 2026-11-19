@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 pub const SARIF_SCHEMA_URI: &str = "https://json.schemastore.org/sarif-2.1.0.json";
 pub const SARIF_VERSION: &str = "2.1.0";
-pub const FOLIORA_TOOL_VERSION: &str = "0.6.0";
+pub const FOLIORA_TOOL_VERSION: &str = "0.7.0";
 pub const FOLIORA_INFO_URI: &str = "https://github.com/SalyyS1/foliora";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -220,6 +220,36 @@ const RULE_SPECS: &[RuleSpec] = &[
         full_desc: "Detects opposing boolean/deontic polarity (such as required vs not required/optional or enabled vs disabled) across aligned propositions.",
         help: "Audit both cited clauses for scope differences or policy supersession before exporting.",
         tags: &["integrity", "contradiction", "polarity"],
+    },
+    RuleSpec {
+        id: "FP008",
+        name: "ClaimToEvidenceNumericalMismatch",
+        level: "warning",
+        severity: "7.0",
+        short_desc: "Claim numerical quantity contradicts cited evidence source text",
+        full_desc: "Detects numerical quantities or metrics in a claim value that contradict or have ungrounded values when compared against cited evidence source text or locator.",
+        help: "Review the numerical claims against cited evidence sources and reconcile conflicting figures.",
+        tags: &["faithfulness", "grounding", "numerical"],
+    },
+    RuleSpec {
+        id: "FP009",
+        name: "UnitScaleIncommensurability",
+        level: "warning",
+        severity: "6.5",
+        short_desc: "Unit scale or order-of-magnitude mismatch between claim and evidence",
+        full_desc: "Detects unit scale divergence (such as MB vs GB, milliseconds vs seconds, or currency denomination mismatches) between a claim and its cited source.",
+        help: "Align the measurement unit of the claim with the scale verified in the primary evidence source.",
+        tags: &["faithfulness", "units", "scale"],
+    },
+    RuleSpec {
+        id: "FP010",
+        name: "DirectionalEntailmentInversion",
+        level: "warning",
+        severity: "7.2",
+        short_desc: "Directional or trend polarity inversion between claim and evidence",
+        full_desc: "Detects directional or comparative sentiment inversion (such as increase vs decrease, higher vs lower, or pass vs fail) between a claim assertion and cited evidence.",
+        help: "Verify the directional assertion of the claim against the primary evidence source to prevent hallucinated sentiment inversion.",
+        tags: &["faithfulness", "entailment", "polarity"],
     },
 ];
 
@@ -456,6 +486,9 @@ fn rule_index_and_level(kind: HazardKind) -> (usize, &'static str) {
         HazardKind::NumericalContradiction => (4, "warning"),
         HazardKind::TemporalContradiction => (5, "warning"),
         HazardKind::PolarityContradiction => (6, "warning"),
+        HazardKind::ClaimToEvidenceNumericalMismatch => (7, "warning"),
+        HazardKind::UnitScaleIncommensurability => (8, "warning"),
+        HazardKind::DirectionalEntailmentInversion => (9, "warning"),
     }
 }
 
@@ -527,7 +560,7 @@ mod tests {
         let parsed: SarifLog = serde_json::from_str(&raw_json).unwrap();
         assert_eq!(parsed.version, "2.1.0");
         assert_eq!(parsed.runs.len(), 1);
-        assert_eq!(parsed.runs[0].tool.driver.rules.len(), 7);
+        assert_eq!(parsed.runs[0].tool.driver.rules.len(), 10);
 
         let fp003 = parsed.runs[0]
             .results

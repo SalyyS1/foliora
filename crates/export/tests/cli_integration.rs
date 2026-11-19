@@ -11,7 +11,7 @@ fn cli_version_and_help() {
         .expect("failed to execute foliora --version");
     assert!(version_output.status.success());
     let version_str = String::from_utf8_lossy(&version_output.stdout);
-    assert!(version_str.contains("foliora 0.6.0"));
+    assert!(version_str.contains("foliora 0.7.0"));
 
     let help_output = Command::new(bin)
         .arg("--help")
@@ -23,8 +23,10 @@ fn cli_version_and_help() {
     assert!(help_str.contains("diff"));
     assert!(help_str.contains("graph"));
     assert!(help_str.contains("tables"));
+    assert!(help_str.contains("keygen"));
     assert!(help_str.contains("sign"));
     assert!(help_str.contains("verify-sig"));
+    assert!(help_str.contains("merkle-proof"));
     assert!(help_str.contains("contradictions"));
     assert!(help_str.contains("eval"));
     assert!(help_str.contains("search"));
@@ -389,6 +391,86 @@ fn cli_diff_and_graph_subcommands() {
     let eval_md = String::from_utf8_lossy(&eval_out.stdout);
     assert!(eval_md.contains("# Retrieval Evaluation: bench:cli-1"));
     assert!(eval_md.contains("Hybrid RRF"));
+
+    // Clean up
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cli_merkle_proof_generate_and_verify() {
+    let bin = env!("CARGO_BIN_EXE_foliora");
+
+    let dir = std::env::temp_dir().join(format!("foliora_merkle_test_{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+
+    let bundle_path = dir.join("bundle.json");
+    let bundle_json = r#"{
+      "schema_version": 1,
+      "domain_schema_version": 1,
+      "id": "bundle:merkle-cli-1",
+      "purpose": "Merkle selective proof test",
+      "exported_at": "2026-11-19T00:00:00Z",
+      "expires_at": null,
+      "claims": [
+        {
+          "id": "claim:m1",
+          "claim_type": "sla.uptime",
+          "subject": "auth",
+          "value": "99.99% monthly availability",
+          "sensitivity": "public",
+          "provenance": { "source_id": null, "locator": null, "user_entered_at": "2026-11-19T00:00:00Z" }
+        },
+        {
+          "id": "claim:m2",
+          "claim_type": "sla.latency",
+          "subject": "auth",
+          "value": "15 ms p99 response time",
+          "sensitivity": "internal",
+          "provenance": { "source_id": null, "locator": null, "user_entered_at": "2026-11-19T00:00:00Z" }
+        }
+      ],
+      "evidence": []
+    }"#;
+    fs::write(&bundle_path, bundle_json).unwrap();
+
+    let proof_path = dir.join("proof.json");
+
+    // 1. Generate selective Merkle proof for claim:m2
+    let gen_out = Command::new(bin)
+        .arg("merkle-proof")
+        .arg("generate")
+        .arg(&bundle_path)
+        .arg("--claims")
+        .arg("claim:m2")
+        .arg("--out")
+        .arg(&proof_path)
+        .output()
+        .expect("foliora merkle-proof generate failed");
+    assert!(
+        gen_out.status.success(),
+        "merkle-proof generate stderr: {}",
+        String::from_utf8_lossy(&gen_out.stderr)
+    );
+
+    let proof_json = fs::read_to_string(&proof_path).unwrap();
+    assert!(proof_json.contains("claim:m2"));
+    assert!(proof_json.contains("root_sha256"));
+    assert!(proof_json.contains("audit_path"));
+
+    // 2. Verify selective Merkle proof
+    let ver_out = Command::new(bin)
+        .arg("merkle-proof")
+        .arg("verify")
+        .arg("--proof")
+        .arg(&proof_path)
+        .output()
+        .expect("foliora merkle-proof verify failed");
+    assert!(
+        ver_out.status.success(),
+        "merkle-proof verify stderr: {}",
+        String::from_utf8_lossy(&ver_out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&ver_out.stdout).contains("Merkle proof VALID"));
 
     // Clean up
     let _ = fs::remove_dir_all(&dir);

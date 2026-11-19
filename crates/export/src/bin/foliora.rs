@@ -22,7 +22,7 @@ use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 use std::process::ExitCode;
 
-const VERSION: &str = "0.6.0";
+const VERSION: &str = "0.7.0";
 
 fn print_help() {
     println!(
@@ -38,8 +38,9 @@ SUBCOMMANDS:
     keygen                   Generate an Ed25519 signing keypair for bundle attestation
     sign <file>              Sign a ReviewedBundle with an Ed25519 secret key
     verify-sig <file>        Verify an Ed25519 bundle signature (detached or inline)
-    verify <file>            Verify bundle schema, SHA-256 digests, and FP001-FP007 hazards
-    contradictions <file>    Scan bundle or chunks for FP005-FP007 contradictions
+    merkle-proof <action>    Generate or verify Merkle-tree selective inclusion proofs (FP008-FP010)
+    verify <file>            Verify bundle schema, SHA-256 digests, and FP001-FP010 hazards
+    contradictions <file>    Scan bundle or chunks for FP005-FP010 contradictions
     eval <benchmark.json>    Evaluate Hybrid RRF vs BM25+ and Dense retrieval (Recall/MRR/nDCG)
     search <bundle> <query>  Rank reviewed claims with Reciprocal Rank Fusion (rrf|bm25|dense)
     help                     Print this help message
@@ -57,8 +58,12 @@ TABLES OPTIONS:
     --format <fmt>           Table format: markdown (default), csv, json
     --out <path>             Write output to file instead of stdout
 
+MERKLE-PROOF OPTIONS:
+    generate <bundle>        Generate selective inclusion proofs [--claims <c1,c2>] [--out <path>]
+    verify [--root <root>]   Verify selective inclusion proofs against expected root [--proof <file>]
+
 VERIFY / CONTRADICTIONS OPTIONS:
-    --sarif                  Emit OASIS SARIF v2.1.0 report (FP001-FP007)
+    --sarif                  Emit OASIS SARIF v2.1.0 report (FP001-FP010)
     --json                   Emit structured JSON report
     --verified-at <utc>      Canonical UTC verification timestamp
     --out <path>             Write output to file instead of stdout
@@ -806,6 +811,118 @@ fn run_search(args: &[String]) -> Result<(), String> {
     write_output(&output, out_path)
 }
 
+fn run_merkle_proof(args: &[String]) -> Result<(), String> {
+    if args.is_empty() {
+        return Err("usage: foliora merkle-proof <generate|verify> [options]".to_string());
+    }
+
+    match args[0].as_str() {
+        "generate" => {
+            if args.len() < 2 {
+                return Err("usage: foliora merkle-proof generate <bundle.json> [--claims <id1,id2>] [--out <path>]".to_string());
+            }
+            let bundle_path = &args[1];
+            let bundle = load_bundle(bundle_path)?;
+
+            let mut selected_claims = Vec::new();
+            let mut out_path = None;
+            let mut idx = 2;
+
+            while idx < args.len() {
+                match args[idx].as_str() {
+                    "--claims" => {
+                        idx += 1;
+                        if idx >= args.len() {
+                            return Err("--claims requires comma-separated claim IDs".to_string());
+                        }
+                        selected_claims = args[idx]
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
+                    }
+                    "--out" => {
+                        idx += 1;
+                        if idx >= args.len() {
+                            return Err("--out requires a destination file path".to_string());
+                        }
+                        out_path = Some(args[idx].clone());
+                    }
+                    other => {
+                        return Err(format!(
+                            "unknown option '{other}' for merkle-proof generate"
+                        ))
+                    }
+                }
+                idx += 1;
+            }
+
+            let proof = foliora_export::generate_selective_bundle_proof(&bundle, &selected_claims)?;
+            let json = serde_json::to_string_pretty(&proof).map_err(|e| e.to_string())?;
+            write_output(&json, out_path.as_deref())
+        }
+        "verify" => {
+            let mut proof_path = None;
+            let mut root_hash = None;
+            let mut idx = 1;
+
+            while idx < args.len() {
+                match args[idx].as_str() {
+                    "--proof" => {
+                        idx += 1;
+                        if idx >= args.len() {
+                            return Err("--proof requires a proof JSON path".to_string());
+                        }
+                        proof_path = Some(args[idx].clone());
+                    }
+                    "--root" => {
+                        idx += 1;
+                        if idx >= args.len() {
+                            return Err("--root requires expected root SHA-256 hash".to_string());
+                        }
+                        root_hash = Some(args[idx].clone());
+                    }
+                    other => {
+                        if proof_path.is_none() && !other.starts_with("--") {
+                            proof_path = Some(other.to_string());
+                        } else {
+                            return Err(format!(
+                                "unknown option '{other}' for merkle-proof verify"
+                            ));
+                        }
+                    }
+                }
+                idx += 1;
+            }
+
+            let path_str = proof_path.ok_or_else(|| "--proof <path> is required".to_string())?;
+            let content = fs::read_to_string(&path_str)
+                .map_err(|e| format!("cannot read {path_str}: {e}"))?;
+            let proof: foliora_export::SelectiveBundleProof = serde_json::from_str(&content)
+                .map_err(|e| format!("invalid selective bundle proof JSON: {e}"))?;
+
+            let valid =
+                foliora_export::verify_selective_bundle_proof(&proof, root_hash.as_deref())?;
+            if valid {
+                println!(
+                    "Merkle proof VALID: {} claim(s) verified against root {}",
+                    proof.claims.len(),
+                    root_hash.as_deref().unwrap_or(&proof.root_sha256)
+                );
+                Ok(())
+            } else {
+                Err(format!(
+                    "Merkle proof INVALID: claim cryptographic proofs failed against root {}",
+                    root_hash.as_deref().unwrap_or(&proof.root_sha256)
+                ))
+            }
+        }
+        other => Err(format!(
+            "unknown merkle-proof action '{other}'; expected generate or verify"
+        )),
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
@@ -820,6 +937,7 @@ fn main() -> ExitCode {
         "keygen" => run_keygen(&args[1..]),
         "sign" => run_sign(&args[1..]),
         "verify-sig" => run_verify_sig(&args[1..]),
+        "merkle-proof" => run_merkle_proof(&args[1..]),
         "verify" => run_verify(&args[1..]),
         "contradictions" => run_contradictions(&args[1..]),
         "eval" => run_eval(&args[1..]),

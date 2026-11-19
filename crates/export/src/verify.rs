@@ -27,6 +27,9 @@ pub enum HazardKind {
     NumericalContradiction,
     TemporalContradiction,
     PolarityContradiction,
+    ClaimToEvidenceNumericalMismatch,
+    UnitScaleIncommensurability,
+    DirectionalEntailmentInversion,
 }
 
 impl HazardKind {
@@ -39,6 +42,9 @@ impl HazardKind {
             Self::NumericalContradiction => "FP005",
             Self::TemporalContradiction => "FP006",
             Self::PolarityContradiction => "FP007",
+            Self::ClaimToEvidenceNumericalMismatch => "FP008",
+            Self::UnitScaleIncommensurability => "FP009",
+            Self::DirectionalEntailmentInversion => "FP010",
         }
     }
 }
@@ -321,6 +327,9 @@ pub fn scan_bundle_hazards(bundle: &ReviewedBundle) -> Vec<PromptHazard> {
     }
     for contradiction in crate::contradiction::scan_bundle_contradictions(bundle) {
         hazards.push(contradiction.into_prompt_hazard());
+    }
+    for entailment in crate::entailment::scan_bundle_entailment(bundle, None) {
+        hazards.push(entailment.into_prompt_hazard());
     }
     hazards
 }

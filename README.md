@@ -1,4 +1,4 @@
-# Foliora 0.6.0
+# Foliora 0.7.0
 
 Foliora is a provisional product codename for a local-first context pack builder and verifier. Name, domain, trademark, and package availability are not cleared yet.
 
@@ -28,7 +28,7 @@ crates/domain/       Shared Rust domain types and state transitions
 crates/vault/        Argon2id + XChaCha20-Poly1305 encrypted local vault
 crates/ingestion/    Bounded offline text, Markdown, PDF, PDF coordinate table extraction, OOXML .docx, email, PNG/JPEG ingestion + SHA-256 and TF-IDF semantic chunk deduplication
 crates/model/        Preview-first optional OpenAI BYOK suggestion boundary
-crates/export/       Reviewed JSON/PDF/Markdown/JSONL-stream exports, citation graph (DOT/Mermaid/SVG/HTML), Ed25519 bundle signing, Hybrid RRF retrieval & IR evaluator, streaming diff, token-budget allocator, FP001-FP007 hazard & contradiction scanner, and OASIS SARIF v2.1.0 exporter
+crates/export/       Reviewed JSON/PDF/Markdown/JSONL-stream exports, citation graph (DOT/Mermaid/SVG/HTML), Ed25519 bundle signing, Merkle-tree selective inclusion proofs, Hybrid RRF retrieval & IR evaluator, streaming diff, token-budget allocator, FP001-FP010 hazard/contradiction/entailment scanner, and OASIS SARIF v2.1.0 exporter
 crates/sync/         E2EE objects, device signatures and revision DAG protocol
 services/sync/       Authenticated PostgreSQL/S3 opaque sync service
 packages/schema/     Apache-2.0 JSON schema definitions

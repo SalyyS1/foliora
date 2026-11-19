@@ -195,6 +195,9 @@ export function scanBundleHazards(bundle) {
   for (const c of scanBundleContradictions(bundle)) {
     hazards.push(c);
   }
+  for (const e of scanBundleEntailment(bundle)) {
+    hazards.push(e);
+  }
   return hazards;
 }
 
@@ -380,6 +383,194 @@ export function scanBundleContradictions(bundle) {
               emit('FP007', 'polarity_contradiction', a, b, `opposing polarity on '${pa.pred}': '${pa.raw}' vs '${pb.raw}'`);
             }
           }
+        }
+      }
+    }
+  }
+
+  return findings;
+}
+
+export function scanBundleEntailment(bundle, sourceTexts = null) {
+  const claims = bundle?.claims ?? [];
+  const evidenceList = bundle?.evidence ?? [];
+  const evidenceById = new Map(evidenceList.map((e) => [e.id, e]));
+  const findings = [];
+
+  const extractClaimText = (c) => {
+    const val = flattenClaimValue(c.value);
+    const hint = String(c.claim_type ?? '').replace(/[._:-]/g, ' ');
+    const subj = String(c.subject ?? '');
+    return `${val} ${hint} ${subj}`.toLowerCase();
+  };
+
+  const parseMetrics = (text) => {
+    const metrics = [];
+    const words = text.toLowerCase().match(/[^\s]+/g) ?? [];
+    for (let i = 0; i < words.length; i += 1) {
+      const w = words[i].replace(/^[^a-z0-9$%€]+|[^a-z0-9$%€]+$/g, '');
+      if (!w) continue;
+
+      const anchors = [];
+      const start = Math.max(0, i - 4);
+      const end = Math.min(words.length, i + 5);
+      for (let k = start; k < end; k += 1) {
+        if (k === i) continue;
+        const cl = words[k].replace(/[^a-z0-9]/g, '');
+        if (cl.length >= 3 && !/^\d+$/.test(cl)) {
+          anchors.push(stemWord(cl));
+        }
+      }
+      const anchorSet = new Set(anchors);
+
+      if (w.startsWith('$') || w.startsWith('€')) {
+        const curr = w[0];
+        const num = parseFloat(w.slice(1));
+        if (Number.isFinite(num)) {
+          metrics.push({ raw: w, number: num, family: 'currency', unit: curr, scale: 1, anchors: anchorSet });
+          continue;
+        }
+      }
+
+      if (w.endsWith('%')) {
+        const num = parseFloat(w.slice(0, -1));
+        if (Number.isFinite(num)) {
+          metrics.push({ raw: w, number: num, family: 'pct', unit: '%', scale: 1, anchors: anchorSet });
+          continue;
+        }
+      }
+
+      const num = parseFloat(w);
+      if (Number.isFinite(num)) {
+        const nextWord = (words[i + 1] ?? '').replace(/[^a-z0-9%]/g, '');
+        const unitDef = UNIT_TABLE[nextWord];
+        if (unitDef) {
+          metrics.push({
+            raw: `${w} ${nextWord}`,
+            number: num,
+            family: unitDef[0],
+            unit: nextWord,
+            scale: unitDef[1],
+            anchors: anchorSet,
+          });
+        } else {
+          metrics.push({
+            raw: w,
+            number: num,
+            family: 'scalar',
+            unit: '',
+            scale: 1,
+            anchors: anchorSet,
+          });
+        }
+      }
+    }
+    return metrics;
+  };
+
+  const parseDirections = (text) => {
+    const directions = [];
+    const words = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+    const upwardWords = new Set(['increase', 'growth', 'exceed', 'gain', 'improve', 'higher', 'rise', 'rising', 'boost']);
+    const downwardWords = new Set(['decrease', 'drop', 'fall', 'lose', 'loss', 'decline', 'lower', 'reduce', 'reduction']);
+
+    for (let i = 0; i < words.length; i += 1) {
+      const w = words[i];
+      let trend = null;
+      if (upwardWords.has(w)) trend = 'upward';
+      else if (downwardWords.has(w)) trend = 'downward';
+
+      if (trend) {
+        for (let k = Math.max(0, i - 3); k <= Math.min(words.length - 1, i + 3); k += 1) {
+          if (k === i) continue;
+          const cw = stemWord(words[k]);
+          if (cw.length >= 3 && !upwardWords.has(words[k]) && !downwardWords.has(words[k])) {
+            directions.push({ trend, anchor: cw, rawPhrase: `${trend} ${cw}` });
+          }
+        }
+      }
+    }
+    return directions;
+  };
+
+  for (const claim of claims) {
+    const sourceId = claim.provenance?.source_id;
+    if (!sourceId) continue;
+
+    let evidenceText = '';
+    if (sourceTexts && sourceTexts[sourceId]) {
+      evidenceText = String(sourceTexts[sourceId]);
+    } else {
+      const ev = evidenceById.get(sourceId);
+      if (ev) {
+        evidenceText = `${ev.title ?? ''} ${ev.summary ?? ''} ${ev.text ?? ''}`;
+      }
+    }
+    if (!evidenceText.trim()) continue;
+
+    const claimText = extractClaimText(claim);
+    const claimMetrics = parseMetrics(claimText);
+    const evMetrics = parseMetrics(evidenceText.toLowerCase());
+
+    for (const cm of claimMetrics) {
+      for (const em of evMetrics) {
+        const shared = [...cm.anchors].filter((a) => em.anchors.has(a));
+        if (shared.length === 0) continue;
+        const anchor = shared[0];
+
+        if (cm.family !== em.family) {
+          findings.push({
+            rule_id: 'FP009',
+            kind: 'unit_scale_incommensurability',
+            target_id: claim.id,
+            related_target_id: sourceId,
+            field: 'claim.value',
+            detail: `unit scale mismatch for '${anchor}': claim specifies '${cm.raw}' but evidence specifies '${em.raw}'`,
+          });
+          continue;
+        }
+
+        if (cm.family === 'bytes' && Math.abs(Math.log10(cm.scale / em.scale)) >= 2.9) {
+          findings.push({
+            rule_id: 'FP009',
+            kind: 'unit_scale_incommensurability',
+            target_id: claim.id,
+            related_target_id: sourceId,
+            field: 'claim.value',
+            detail: `unit scale mismatch for '${anchor}': claim specifies '${cm.raw}' but evidence specifies '${em.raw}'`,
+          });
+          continue;
+        }
+
+        const cVal = cm.number * cm.scale;
+        const eVal = em.number * em.scale;
+        const denom = Math.max(Math.abs(cVal), Math.abs(eVal), 1e-9);
+        if (Math.abs(cVal - eVal) / denom > 1e-4) {
+          findings.push({
+            rule_id: 'FP008',
+            kind: 'claim_to_evidence_numerical_mismatch',
+            target_id: claim.id,
+            related_target_id: sourceId,
+            field: 'claim.value',
+            detail: `numerical quantity mismatch for '${anchor}': claim asserts '${cm.raw}' but cited evidence records '${em.raw}'`,
+          });
+        }
+      }
+    }
+
+    const claimDirs = parseDirections(claimText);
+    const evDirs = parseDirections(evidenceText.toLowerCase());
+    for (const cd of claimDirs) {
+      for (const ed of evDirs) {
+        if (cd.anchor === ed.anchor && cd.trend !== ed.trend) {
+          findings.push({
+            rule_id: 'FP010',
+            kind: 'directional_entailment_inversion',
+            target_id: claim.id,
+            related_target_id: sourceId,
+            field: 'claim.value',
+            detail: `directional entailment inversion for '${cd.anchor}': claim asserts ${cd.trend} trend ('${cd.rawPhrase}') but evidence asserts ${ed.trend} trend ('${ed.rawPhrase}')`,
+          });
         }
       }
     }
@@ -1205,6 +1396,9 @@ const SARIF_RULES = [
   { id: 'FP005', name: 'NumericalContradiction', level: 'warning', severity: '6.8', short: 'Cross-chunk or cross-claim unit-normalized numerical contradiction' },
   { id: 'FP006', name: 'TemporalContradiction', level: 'warning', severity: '6.8', short: 'Cross-chunk or cross-claim calendar date or lifecycle window contradiction' },
   { id: 'FP007', name: 'PolarityContradiction', level: 'warning', severity: '6.5', short: 'Cross-chunk or cross-claim negation or modal polarity contradiction' },
+  { id: 'FP008', name: 'ClaimToEvidenceNumericalMismatch', level: 'warning', severity: '7.0', short: 'Extracted claim value differs from cited evidence metric' },
+  { id: 'FP009', name: 'UnitScaleIncommensurability', level: 'warning', severity: '6.8', short: 'Claim and cited evidence use incompatible or uncalibrated units' },
+  { id: 'FP010', name: 'DirectionalEntailmentInversion', level: 'error', severity: '8.0', short: 'Claim asserts increase/decrease contrary to cited evidence trend' },
 ];
 
 export function exportBundleSarif(bundle, artifactUri = 'reviewed-bundle.json') {
@@ -1220,11 +1414,12 @@ export function exportBundleSarif(bundle, artifactUri = 'reviewed-bundle.json') 
     const relatedLocations = [];
     if (h.related_target_id) {
       const peer = claimsById.get(h.related_target_id);
+      const isPeerClaim = !!peer;
       relatedLocations.push({
         id: 1,
-        message: { text: `Conflicting peer target ${h.related_target_id}` },
-        physicalLocation: { artifactLocation: { uri: peer?.provenance?.source_id ?? artifactUri } },
-        logicalLocations: [{ name: h.related_target_id, fullyQualifiedName: `${h.related_target_id}::${h.field}`, kind: 'claim' }],
+        message: { text: isPeerClaim ? `Conflicting peer target ${h.related_target_id}` : `Cited evidence source ${h.related_target_id}` },
+        physicalLocation: { artifactLocation: { uri: peer?.provenance?.source_id ?? h.related_target_id ?? artifactUri } },
+        logicalLocations: [{ name: h.related_target_id, fullyQualifiedName: `${h.related_target_id}::${h.field}`, kind: isPeerClaim ? 'claim' : 'evidence' }],
       });
     }
     return {
@@ -1250,7 +1445,7 @@ export function exportBundleSarif(bundle, artifactUri = 'reviewed-bundle.json') 
         tool: {
           driver: {
             name: 'foliora',
-            version: '0.6.0',
+            version: '0.7.0',
             informationUri: 'https://github.com/SalyyS1/foliora',
             rules: SARIF_RULES.map((r) => ({
               id: r.id,
@@ -1354,4 +1549,161 @@ export function rankClaimsHybridRrf(bundle, query, topK = 5, rrfK = 60) {
     .sort((a, b) => b.fused_score - a.fused_score || b.bm25_score - a.bm25_score)
     .slice(0, Math.max(1, topK))
     .map((h, i) => ({ ...h, rank: i + 1 }));
+}
+
+export async function computeClaimLeafHash(claim) {
+  const enc = new TextEncoder();
+  const valueBytes = enc.encode(JSON.stringify(claim.value ?? null));
+  const prefix = enc.encode(`foliora:claim:v1:${claim.id}:${claim.claim_type}:${claim.subject}:`);
+  const buf = new Uint8Array(prefix.length + valueBytes.length);
+  buf.set(prefix);
+  buf.set(valueBytes, prefix.length);
+  return sha256Hex(buf);
+}
+
+export async function hashMerkleNodes(left, right) {
+  const enc = new TextEncoder();
+  const bytes = enc.encode(`foliora:merkle:node:v1:${left}:${right}`);
+  return sha256Hex(bytes);
+}
+
+export async function buildMerkleTree(claims) {
+  if (!claims || claims.length === 0) {
+    const enc = new TextEncoder();
+    const emptyRoot = await sha256Hex(enc.encode('foliora:empty:bundle'));
+    return {
+      leaves: [],
+      levels: [[emptyRoot]],
+      root: emptyRoot,
+    };
+  }
+
+  const leaves = [];
+  for (const c of claims) {
+    leaves.push(await computeClaimLeafHash(c));
+  }
+
+  const levels = [leaves.slice()];
+  let current = leaves.slice();
+
+  while (current.length > 1) {
+    const next = [];
+    for (let i = 0; i < current.length; i += 2) {
+      if (i + 1 < current.length) {
+        next.push(await hashMerkleNodes(current[i], current[i + 1]));
+      } else {
+        next.push(await hashMerkleNodes(current[i], current[i]));
+      }
+    }
+    levels.push(next.slice());
+    current = next;
+  }
+
+  const root = levels[levels.length - 1][0];
+  return {
+    leaves,
+    levels,
+    root,
+  };
+}
+
+export function proofForLeafIndex(tree, bundleId, claimId, leafIndex) {
+  if (leafIndex < 0 || leafIndex >= tree.leaves.length) {
+    return null;
+  }
+  const auditPath = [];
+  let idx = leafIndex;
+
+  for (let l = 0; l < tree.levels.length - 1; l += 1) {
+    const level = tree.levels[l];
+    const isRight = idx % 2 === 1;
+    const siblingIdx = isRight ? idx - 1 : idx + 1 < level.length ? idx + 1 : idx;
+    auditPath.push({
+      sibling_hash: level[siblingIdx],
+      is_left: isRight,
+    });
+    idx = Math.floor(idx / 2);
+  }
+
+  return {
+    bundle_id: String(bundleId),
+    root_sha256: tree.root,
+    claim_id: String(claimId),
+    leaf_index: leafIndex,
+    total_leaves: tree.leaves.length,
+    leaf_hash: tree.leaves[leafIndex],
+    audit_path: auditPath,
+  };
+}
+
+export async function verifyMerkleProof(proof, expectedRoot) {
+  let current = proof.leaf_hash;
+  for (const step of proof.audit_path ?? []) {
+    if (step.is_left) {
+      current = await hashMerkleNodes(step.sibling_hash, current);
+    } else {
+      current = await hashMerkleNodes(current, step.sibling_hash);
+    }
+  }
+  return current === expectedRoot;
+}
+
+export async function verifyClaimInclusion(claim, proof, expectedRoot) {
+  if (!claim || !proof || claim.id !== proof.claim_id) return false;
+  const computedLeaf = await computeClaimLeafHash(claim);
+  if (computedLeaf !== proof.leaf_hash) return false;
+  return verifyMerkleProof(proof, expectedRoot);
+}
+
+export async function generateSelectiveBundleProof(bundle, selectedClaimIds = []) {
+  const claims = bundle?.claims ?? [];
+  if (claims.length === 0) {
+    throw new Error('cannot generate Merkle proof for empty bundle');
+  }
+
+  const tree = await buildMerkleTree(claims);
+  const targetSet = new Set(selectedClaimIds);
+  const verifiedClaims = [];
+  const proofs = [];
+
+  for (let idx = 0; idx < claims.length; idx += 1) {
+    const claim = claims[idx];
+    if (targetSet.size === 0 || targetSet.has(claim.id)) {
+      const proof = proofForLeafIndex(tree, bundle.id, claim.id, idx);
+      if (!proof) {
+        throw new Error(`failed to generate proof for leaf index ${idx}`);
+      }
+      verifiedClaims.push(claim);
+      proofs.push(proof);
+    }
+  }
+
+  if (verifiedClaims.length === 0) {
+    throw new Error('none of the requested claim IDs were found in bundle');
+  }
+
+  return {
+    schema_version: 1,
+    bundle_id: bundle.id,
+    root_sha256: tree.root,
+    total_claims: claims.length,
+    claims: verifiedClaims,
+    proofs,
+  };
+}
+
+export async function verifySelectiveBundleProof(proofBundle, expectedRoot = null) {
+  const root = expectedRoot ?? proofBundle?.root_sha256;
+  if (!root || !proofBundle) return false;
+  if (root !== proofBundle.root_sha256) return false;
+  if (!Array.isArray(proofBundle.claims) || !Array.isArray(proofBundle.proofs)) return false;
+  if (proofBundle.claims.length !== proofBundle.proofs.length || proofBundle.claims.length === 0) return false;
+
+  for (let i = 0; i < proofBundle.claims.length; i += 1) {
+    const claim = proofBundle.claims[i];
+    const proof = proofBundle.proofs[i];
+    const valid = await verifyClaimInclusion(claim, proof, root);
+    if (!valid) return false;
+  }
+  return true;
 }

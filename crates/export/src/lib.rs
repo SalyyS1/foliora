@@ -5,8 +5,10 @@ mod budget;
 mod clipboard;
 pub mod contradiction;
 pub mod diff;
+pub mod entailment;
 pub mod graph;
 mod markdown;
+pub mod merkle;
 mod pdf;
 pub mod retrieval;
 pub mod sarif;
@@ -30,11 +32,18 @@ pub use diff::{
     diff_jsonl_streams, diff_reviewed_bundles, render_diff_markdown, BundleDiffReport,
     CitationOverlapMetrics, ClaimDiff, ClaimModification, EvidenceDiff, EvidenceModification,
 };
+pub use entailment::{scan_bundle_entailment, verify_claim_against_evidence, EntailmentFinding};
 pub use graph::{
     export_citation_graph, render_dot, render_html, render_mermaid, render_svg, CitationGraphEdge,
     CitationGraphExport, CitationGraphNode, CitationNodeKind,
 };
 pub use markdown::{export_reviewed_markdown, MarkdownExport, MarkdownLocale};
+pub use merkle::{
+    compute_claim_leaf_hash, generate_selective_bundle_proof, hash_merkle_nodes,
+    verify_claim_inclusion, verify_merkle_proof, verify_selective_bundle_proof,
+    MerkleInclusionProof, MerkleProofStep, MerkleTree, SelectiveBundleProof,
+    MERKLE_PROOF_SCHEMA_VERSION,
+};
 pub use pdf::{export_reviewed_pdf, PdfExport, PdfLocale};
 pub use retrieval::{
     documents_from_bundle, documents_from_chunks, evaluate_retrieval_benchmark,

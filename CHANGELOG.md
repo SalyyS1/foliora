@@ -2,6 +2,17 @@
 
 All notable changes to Foliora are documented here.
 
+## 0.7.0 - 2026-11-19
+
+Claim-to-evidence numerical and unit entailment verifier (FP008-FP010), Merkle-tree selective context-pack inclusion proofs, updated SARIF v2.1.0 reporting, and client-side browser verification engine.
+
+### Included
+
+- Added claim-to-evidence numerical and unit entailment verification (`scan_bundle_entailment`, `verify_claim_against_evidence`, `foliora entailment`) in `foliora-export`: `FP008` detects numerical discrepancy between extracted claim value and cited evidence source text, `FP009` detects unit scale incommensurability across bytes, durations, currencies, and percentages, and `FP010` detects directional trend and polarity inversions between claims and cited evidence.
+- Added Merkle-tree selective context-pack inclusion proofs (`MerkleTree`, `compute_claim_leaf_hash`, `generate_selective_bundle_proof`, `verify_selective_bundle_proof`, `foliora merkle-proof`) in `foliora-export`, providing zero-knowledge selective disclosure where recipients can mathematically verify that selected claims belong to an authenticated bundle root without transmitting the entire bundle.
+- Expanded OASIS SARIF v2.1.0 static analysis export (`export_bundle_sarif`, `export_verification_sarif`) to cover rules `FP001` through `FP010` with exact rule descriptors, security severity scores, and cited evidence location bindings.
+- Upgraded `@foliora/site` (`v0.7.0`) with client-side WebCrypto Merkle inclusion proof generator/verifier, `FP008`-`FP010` entailment analysis, and comprehensive test suite in `scripts/test-pack-engine.mjs`.
+
 ## 0.6.0 - 2026-11-18
 
 Reciprocal Rank Fusion (RRF) hybrid BM25+ and dense retrieval evaluator, cross-chunk numerical/temporal/polarity contradiction detector (`FP005`-`FP007`), and OASIS SARIF v2.1.0 security reporting.

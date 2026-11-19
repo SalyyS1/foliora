@@ -4,11 +4,15 @@ import {
   allocateBudgetedMarkdown,
   buildBundleFromLocalDocuments,
   buildPortableArchiveZip,
+  computeClaimLeafHash,
   exportBundleSarif,
+  generateSelectiveBundleProof,
   rankClaimsHybridRrf,
   renderReviewedMarkdown,
+  scanBundleEntailment,
   unpackAndVerifyPortableArchive,
   verifyReviewedBundle,
+  verifySelectiveBundleProof,
 } from '../src/pack-engine.js';
 
 function sampleBundle() {
@@ -203,7 +207,8 @@ test('detects FP005-FP007 contradictions, exports SARIF v2.1.0, and ranks claims
 
   const sarif = exportBundleSarif(bundle, 'bundle.json');
   assert.equal(sarif.version, '2.1.0');
-  assert.equal(sarif.runs[0].tool.driver.rules.length, 7);
+  assert.equal(sarif.runs[0].tool.driver.version, '0.7.0');
+  assert.equal(sarif.runs[0].tool.driver.rules.length, 10);
   assert.ok(sarif.runs[0].results.some((r) => r.ruleId === 'FP005' && r.relatedLocations?.length === 1));
   assert.ok(sarif.runs[0].results.some((r) => r.ruleId === 'FP006' && r.relatedLocations?.length === 1));
   assert.ok(sarif.runs[0].results.some((r) => r.ruleId === 'FP007' && r.relatedLocations?.length === 1));
@@ -211,4 +216,113 @@ test('detects FP005-FP007 contradictions, exports SARIF v2.1.0, and ranks claims
   const hits = rankClaimsHybridRrf(bundle, 'replica ap-southeast-1', 3);
   assert.ok(hits.length > 0);
   assert.equal(hits[0].id, 'claim:2');
+});
+
+test('detects FP008 numerical mismatch, FP009 unit scale mismatch, and FP010 directional inversion', () => {
+  const bundle = sampleBundle();
+  // Add claims that contradict cited evidence in src:1 ("sla.txt" or custom text)
+  bundle.claims.push(
+    {
+      id: 'claim:mismatch_num',
+      claim_type: 'sla.latency',
+      subject: 'api',
+      value: '25 ms median latency',
+      sensitivity: 'public',
+      provenance: {
+        source_id: 'src:latency',
+        locator: { kind: 'span', start: 0, end: 10 },
+        user_entered_at: null,
+      },
+    },
+    {
+      id: 'claim:mismatch_scale',
+      claim_type: 'perf.storage',
+      subject: 'cache',
+      value: '64 GB cache allocation',
+      sensitivity: 'public',
+      provenance: {
+        source_id: 'src:storage',
+        locator: { kind: 'span', start: 0, end: 10 },
+        user_entered_at: null,
+      },
+    },
+    {
+      id: 'claim:mismatch_dir',
+      claim_type: 'metric.trend',
+      subject: 'throughput',
+      value: 'Significant growth in throughput',
+      sensitivity: 'public',
+      provenance: {
+        source_id: 'src:trend',
+        locator: { kind: 'span', start: 0, end: 10 },
+        user_entered_at: null,
+      },
+    },
+  );
+
+  bundle.evidence.push(
+    {
+      id: 'src:latency',
+      fingerprint: `sha256:${'d'.repeat(64)}`,
+      media_type: 'text/plain',
+      title: 'benchmark with 85 ms median latency',
+      captured_at: '2026-11-15T00:00:00Z',
+    },
+    {
+      id: 'src:storage',
+      fingerprint: `sha256:${'e'.repeat(64)}`,
+      media_type: 'text/plain',
+      title: 'provisioning spec with 64 MB cache allocation',
+      captured_at: '2026-11-15T00:00:00Z',
+    },
+    {
+      id: 'src:trend',
+      fingerprint: `sha256:${'f'.repeat(64)}`,
+      media_type: 'text/plain',
+      title: 'metrics showing decline in throughput',
+      captured_at: '2026-11-15T00:00:00Z',
+    },
+  );
+
+  const findings = scanBundleEntailment(bundle);
+  assert.ok(findings.some((f) => f.rule_id === 'FP008' && f.target_id === 'claim:mismatch_num'));
+  assert.ok(findings.some((f) => f.rule_id === 'FP009' && f.target_id === 'claim:mismatch_scale'));
+  assert.ok(findings.some((f) => f.rule_id === 'FP010' && f.target_id === 'claim:mismatch_dir'));
+
+  // Also check that verifyReviewedBundle includes these hazards
+  const res = verifyReviewedBundle(bundle, '2026-11-15T06:00:00Z');
+  assert.ok(res.hazards.some((h) => h.rule_id === 'FP008'));
+  assert.ok(res.hazards.some((h) => h.rule_id === 'FP009'));
+  assert.ok(res.hazards.some((h) => h.rule_id === 'FP010'));
+});
+
+test('generates and verifies Merkle tree selective context pack inclusion proofs', async () => {
+  const bundle = sampleBundle();
+  const leafHash0 = await computeClaimLeafHash(bundle.claims[0]);
+  assert.match(leafHash0, /^sha256:[0-9a-f]{64}$/);
+
+  // Generate selective proof for claim:1 and claim:3
+  const selectiveProof = await generateSelectiveBundleProof(bundle, ['claim:1', 'claim:3']);
+  assert.equal(selectiveProof.schema_version, 1);
+  assert.equal(selectiveProof.bundle_id, bundle.id);
+  assert.equal(selectiveProof.total_claims, 3);
+  assert.equal(selectiveProof.claims.length, 2);
+  assert.equal(selectiveProof.proofs.length, 2);
+  assert.match(selectiveProof.root_sha256, /^sha256:[0-9a-f]{64}$/);
+
+  // Verify valid selective proof
+  const ok = await verifySelectiveBundleProof(selectiveProof);
+  assert.equal(ok, true);
+
+  // Tampering with claim value fails verification
+  const tampered = JSON.parse(JSON.stringify(selectiveProof));
+  tampered.claims[0].value = 'tampered content';
+  const tamperedOk = await verifySelectiveBundleProof(tampered);
+  assert.equal(tamperedOk, false);
+
+  // Tampering with root hash fails verification
+  const tamperedRoot = JSON.parse(JSON.stringify(selectiveProof));
+  tamperedRoot.root_sha256 = `sha256:${'0'.repeat(64)}`;
+  const tamperedRootOk = await verifySelectiveBundleProof(tamperedRoot);
+  assert.equal(tamperedRootOk, false);
 });
